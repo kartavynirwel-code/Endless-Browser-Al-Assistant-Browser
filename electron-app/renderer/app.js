@@ -664,7 +664,9 @@ function appendLog(text) {
 // NATIVE AUTOMATION
 // ==============================================
 
-async function executeActions(wv, actions) {
+async function executeActions(wv, actions, originalCommand) {
+    const userWantsSubmit = originalCommand.toLowerCase().includes('submit');
+
     for (const action of actions) {
         if (!automationRunning) break;
         
@@ -674,13 +676,15 @@ async function executeActions(wv, actions) {
         appendLog(`Action: ${type} - ${reason}`, 'acting');
         if (reason) appendAssistantMessage(`🤖 ${reason}`);
 
-        // Safety Layer: Detect destructive actions
-        const destructiveKeywords = ['submit', 'buy', 'purchase', 'delete', 'confirm', 'pay'];
-        if (destructiveKeywords.some(kw => reason?.toLowerCase().includes(kw))) {
-            const confirmed = confirm(`Safety Check: AI wants to "${reason}". Proceed?`);
-            if (!confirmed) {
-                appendAssistantMessage('Action cancelled by user safety check.');
-                continue;
+        // Safety Layer: Detect destructive actions (Submit)
+        const destructiveKeywords = ['submit', 'buy', 'purchase', 'pay'];
+        if (destructiveKeywords.some(kw => reason?.toLowerCase().includes(kw) || type === 'submit')) {
+            if (userWantsSubmit) {
+                appendLog('Auto-proceeding with submission as requested in command.', 'info');
+            } else {
+                appendAssistantMessage('🛑 Stopping: AI reached a "Submit" action, but you didn\'t ask to "submit" in your command. You can manually click Submit now.');
+                automationRunning = false;
+                return false; 
             }
         }
 
@@ -830,7 +834,8 @@ async function runAutomationTask(instruction) {
 
             // 3. Act (Step 3)
             handleStatus('acting');
-            await executeActions(wv, actions);
+            const success = await executeActions(wv, actions, instruction);
+            if (success === false) break; // Loop stopped by safety logic
             
             stepHistory.push(`Step ${step + 1}: Executed ${actions.length} actions: ${actions.map(a => a.reason).join(', ')}`);
             
