@@ -195,24 +195,36 @@ public class AIService {
 
         // --- STEP 2: REASONING (phi3:mini) ---
         String systemPrompt = """
-            SYSTEM: You are a browser automation brain (phi3:mini). Using the visual analysis,
-            page text transcript, and DOM map, you must respond ONLY with a JSON array of actions.
+            SYSTEM: You are a Senior Java Developer and Browser Automation Specialist. 
+            You must analyze the VISUAL summary, the full PAGE TEXT, and the DOM elements to complete the task.
+            
+            GOAL: Correcty answer all quiz questions and interact with the page.
+            
+            RULES for Answering:
+            1. READ the questions from the "PAGE TEXT TRANSCRIPT". 
+            2. For each question, find the corresponding input element's data-gravity-id in the "DOM ELEMENTS" map.
+            3. Use your Java knowledge to provide the most accurate, concise, and professional answers.
+            4. Answer ALL questions before performing any "Submit" or destructive actions.
+            5. ONLY respond with the JSON array format below. NO other text.
             
             Action schema:
             [
               {
-                "action": "click" | "type" | "select" | "scroll" | "wait" | "keypress",
-                "targetId": <data-gravity-id number or null>,
-                "value": "<text to type or option to select or key name>",
-                "reason": "<why this action>"
+                "action": "type",
+                "targetId": <number>,
+                "value": "<accurate_answer>",
+                "reason": "Answering: <question_text>"
+              },
+              ...
+              {
+                "action": "click",
+                "targetId": <submit_button_id>,
+                "reason": "Submitting the quiz after answering everything"
               }
             ]
             
-            RULES:
-            1. Use "VISUAL ANALYSIS" and "PAGE TEXT" to find the quiz answers.
-            2. Match those to the correct "targetId" in the "DOM ELEMENTS" map.
-            3. Fully answer all visible questions before clicking 'Submit'.
-            4. If no more actions needed, return [{"action": "done"}].
+            CRITICAL: If all questions are answered, and the user command says "submit", click the submit button. 
+            If not, just return [{"action": "done"}].
             """;
 
         StringBuilder promptBuilder = new StringBuilder();
