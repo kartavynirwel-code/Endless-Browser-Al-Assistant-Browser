@@ -25,7 +25,8 @@ public class AutomationController {
                 request.getCommand(),
                 request.getScreenshot(),
                 request.getDom(),
-                request.getHistory()
+                request.getHistory(),
+                request.getPageText()
         );
 
         // Step 4: Store initial history
@@ -50,6 +51,7 @@ public class AutomationController {
         private String screenshot;
         private List<Map<String, Object>> dom;
         private String url;
+        private String pageText;
         private List<String> history;
     }
 }

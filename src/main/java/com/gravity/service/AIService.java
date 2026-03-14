@@ -29,7 +29,7 @@ public class AIService {
             .build();
 
     private static final String OLLAMA_URL = "http://localhost:11434/api/generate";
-    private static final String MODEL_NAME = "llava";
+    private static final String MODEL_NAME = "phi3:mini";
 
     /**
      * Calls Local Ollama API
@@ -164,10 +164,10 @@ public class AIService {
         }
     }
 
-    public List<Map<String, Object>> generateAutomationActions(String command, String screenshot, List<Map<String, Object>> dom, List<String> history) {
+    public List<Map<String, Object>> generateAutomationActions(String command, String screenshot, List<Map<String, Object>> dom, List<String> history, String pageText) {
         String systemPrompt = """
             SYSTEM: You are a browser automation agent. You receive a webpage screenshot,
-            a DOM element map (including context text), and a user command.
+            a full text transcript of the page, a DOM element map, and a user command.
             You must respond ONLY with a valid JSON array of actions.
             
             Action schema:
@@ -181,13 +181,10 @@ public class AIService {
             ]
             
             CRITICAL RULES:
-            1. Use the "DOM MAP" to find questions. Questions are often in tags like 'p', 'label', 'span', or 'h3' with "isInterative: false" (or no ID).
-            2. Match the question text to the nearest interactive elements (inputs/buttons) with an "id" and "isInteractive: true".
-            3. Answer ALL questions on the page before clicking any "Submit", "Done", or "Finish" buttons.
-            4. If no questions are left to answer, and the user asked to SUBMIT, then click the Submit button.
-            5. If all answers are filled but no SUBMIT was requested in the command, return [{"action": "done", "reason": "Questions answered"}].
-            
-            Example reasoning for quiz: "I see question '1. What is Java?' in a p tag. Below it, I see an input with data-gravity-id 5. I will type the answer into targetId 5."
+            1. Use "PAGE TEXT" to find the actual quiz questions and content.
+            2. Match the question context to the "DOM ELEMENTS" to find the right data-gravity-id.
+            3. Answer ALL questions on the page before clicking any "Submit" or "Done" button.
+            4. If all answers are filled and user asked to submit, click Submit. Otherwise return [{"action": "done"}].
             """;
 
         if (screenshot != null && screenshot.startsWith("data:image")) {
@@ -195,12 +192,13 @@ public class AIService {
         }
 
         StringBuilder promptBuilder = new StringBuilder();
-        promptBuilder.append("USER COMMAND: ").append(command).append("\n");
+        promptBuilder.append("USER COMMAND: ").append(command).append("\n\n");
+        promptBuilder.append("PAGE TEXT (Content extract):\n").append(pageText != null ? pageText : "No text extracted").append("\n\n");
         if (history != null && !history.isEmpty()) {
             promptBuilder.append("PREVIOUS STEPS HISTORY:\n");
             history.forEach(h -> promptBuilder.append("- ").append(h).append("\n"));
         }
-        promptBuilder.append("DOM MAP: ").append(dom.toString());
+        promptBuilder.append("\nDOM ELEMENTS (interactive items only):\n").append(dom.toString());
 
         Map<String, Object> requestBody = new HashMap<>();
         requestBody.put("model", MODEL_NAME);

@@ -698,18 +698,13 @@ async function executeActions(wv, actions, originalCommand) {
                     
                 case 'type':
                     await wv.executeJavaScript(`
-                        (async () => {
+                        (() => {
                             const el = document.querySelector('[data-gravity-id="${targetId}"]');
                             if (!el) return;
                             el.focus();
-                            el.value = '';
-                            const chars = ${JSON.stringify(value)}.split('');
-                            for (let i = 0; i < chars.length; i++) {
-                                await new Promise(r => setTimeout(r, 30)); // slightly faster typing: 30ms
-                                el.value += chars[i];
-                                el.dispatchEvent(new Event('input', { bubbles: true }));
-                                el.dispatchEvent(new Event('change', { bubbles: true }));
-                            }
+                            el.value = ${JSON.stringify(value)};
+                            el.dispatchEvent(new Event('input', { bubbles: true }));
+                            el.dispatchEvent(new Event('change', { bubbles: true }));
                         })()
                     `);
                     break;
@@ -807,6 +802,9 @@ async function runAutomationTask(instruction) {
                 })()
             `);
 
+            // 1c. Extract full page text for context (Root Cause 2 fix)
+            const pageText = await wv.executeJavaScript(`document.body.innerText.substring(0, 3000)`);
+
             // 2. Query the new Backend Execute Endpoint (Step 2)
             const backendUrl = settings.backendUrl || BACKEND_URL;
             const currentUrl = wv.getURL();
@@ -821,6 +819,7 @@ async function runAutomationTask(instruction) {
                     command: instruction, 
                     screenshot: base64Img, 
                     dom: domElements,
+                    pageText: pageText,
                     url: currentUrl,
                     history: stepHistory
                 })
