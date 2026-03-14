@@ -4,6 +4,9 @@ target/
 
 # Log files
 *.log
+build_error.txt
+build_log.txt
+final_server_log.txt
 
 # Package files
 *.jar
