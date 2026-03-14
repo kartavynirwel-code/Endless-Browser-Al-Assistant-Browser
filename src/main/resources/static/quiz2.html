@@ -57,13 +57,31 @@ button{
 
 <p>5. Java is platform ______.</p>
 <input type="text" name="q5">
-
-<br><br>
-
-<button type="submit">Submit Quiz</button>
-
-</form>
+        <br><br>
+        <button type="button" onclick="checkQuiz2()">Submit Quiz</button>
+    </form>
+    <div id="result2" style="margin-top:20px; font-weight:bold; color:#007BFF;"></div>
 </div>
 
-</body>
+<script>
+function checkQuiz2() {
+    let score = 0;
+    const answers = {
+        q1: "object oriented",
+        q2: "machine",
+        q3: "extends",
+        q4: "main",
+        q5: "independent"
+    };
+
+    for (let i = 1; i <= 5; i++) {
+        let val = document.querySelector(`input[name="q${i}"]`).value.toLowerCase().trim();
+        if (val.includes(answers[`q${i}`])) {
+            score++;
+        }
+    }
+
+    document.getElementById("result2").innerHTML = "Score: " + score + " / 5";
+}
+</script>
 </html>

@@ -180,10 +180,13 @@ public class AIService {
               }
             ]
             
-            If the task is complete, return [{"action": "done", "reason": "Task finished"}].
+            CRITICAL RULES:
+            1. If the page contains a quiz (MCQs or text fields), identify ALL questions.
+            2. For each question, perform the required action (click radio/checkbox or type in text field).
+            3. DO NOT click the "Submit" or "Done" button until you have answered ALL questions on the page.
+            4. If the task is finished, return [{"action": "done", "reason": "Task finished"}].
             
-            If the page contains quiz/MCQ questions, identify the correct answer 
-            using your knowledge and select the right option.
+            Example reasoning for quiz: "I need to fill all 5 text fields with the correct Java terms first, then I will click submit in the NEXT step."
             """;
 
         if (screenshot != null && screenshot.startsWith("data:image")) {
