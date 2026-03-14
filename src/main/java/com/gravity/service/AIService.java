@@ -167,8 +167,8 @@ public class AIService {
     public List<Map<String, Object>> generateAutomationActions(String command, String screenshot, List<Map<String, Object>> dom, List<String> history) {
         String systemPrompt = """
             SYSTEM: You are a browser automation agent. You receive a webpage screenshot,
-            a DOM element map, and a user command. You must respond ONLY with a valid 
-            JSON array of actions. No explanation. No markdown. Only raw JSON array.
+            a DOM element map (including context text), and a user command.
+            You must respond ONLY with a valid JSON array of actions.
             
             Action schema:
             [
@@ -181,12 +181,13 @@ public class AIService {
             ]
             
             CRITICAL RULES:
-            1. If the page contains a quiz (MCQs or text fields), identify ALL questions.
-            2. For each question, perform the required action (click radio/checkbox or type in text field).
-            3. DO NOT click the "Submit" or "Done" button until you have answered ALL questions on the page.
-            4. If the task is finished, return [{"action": "done", "reason": "Task finished"}].
+            1. Use the "DOM MAP" to find questions. Questions are often in tags like 'p', 'label', 'span', or 'h3' with "isInterative: false" (or no ID).
+            2. Match the question text to the nearest interactive elements (inputs/buttons) with an "id" and "isInteractive: true".
+            3. Answer ALL questions on the page before clicking any "Submit", "Done", or "Finish" buttons.
+            4. If no questions are left to answer, and the user asked to SUBMIT, then click the Submit button.
+            5. If all answers are filled but no SUBMIT was requested in the command, return [{"action": "done", "reason": "Questions answered"}].
             
-            Example reasoning for quiz: "I need to fill all 5 text fields with the correct Java terms first, then I will click submit in the NEXT step."
+            Example reasoning for quiz: "I see question '1. What is Java?' in a p tag. Below it, I see an input with data-gravity-id 5. I will type the answer into targetId 5."
             """;
 
         if (screenshot != null && screenshot.startsWith("data:image")) {

@@ -778,25 +778,32 @@ async function runAutomationTask(instruction) {
             const domElements = await wv.executeJavaScript(`
                 (() => {
                     const results = [];
-                    // Only target visible and actually relevant elements
+                    // Capture interactive elements AND text context (questions)
                     document.querySelectorAll(
-                        'input:not([type="hidden"]), button, select, textarea, [role="button"], a'
+                        'input:not([type="hidden"]), button, select, textarea, [role="button"], a, p, span, label, h1, h2, h3'
                     ).forEach((el, i) => {
                         const rect = el.getBoundingClientRect();
                         if (rect.width === 0 || rect.height === 0) return;
                         
-                        el.setAttribute('data-gravity-id', i);
+                        const tag = el.tagName.toLowerCase();
+                        const isInteractive = ['input', 'button', 'select', 'textarea', 'a'].includes(tag) || el.getAttribute('role') === 'button';
+                        
+                        // Assign ID only to interactive elements for automation
+                        if (isInteractive) {
+                            el.setAttribute('data-gravity-id', i);
+                        }
+
                         results.push({
-                            id: i,
-                            tag: el.tagName,
+                            id: isInteractive ? i : null,
+                            tag: tag,
                             type: el.type || '',
+                            text: el.innerText ? el.innerText.trim().substring(0, 100) : '',
                             placeholder: el.placeholder || '',
-                            text: el.innerText ? el.innerText.trim().substring(0, 40) : '',
-                            name: el.name || '',
+                            isInteractive: isInteractive,
                             rect: { x: Math.round(rect.left), y: Math.round(rect.top), w: Math.round(rect.width), h: Math.round(rect.height) }
                         });
                     });
-                    return results.slice(0, 60); // Max 60 elements for context window safety
+                    return results.slice(0, 100); // Increased limit for better context
                 })()
             `);
 
