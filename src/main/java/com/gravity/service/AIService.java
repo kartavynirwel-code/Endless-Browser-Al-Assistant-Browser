@@ -131,36 +131,40 @@ public class AIService {
      * Simple chat - no browser automation, just Q&A with AI
      */
     public String chat(String userMessage, String image) {
-        String systemPrompt = """
-            You are Endless, a helpful AI assistant built into a web browser.
-            Answer the user's question clearly and concisely.
-            You can help with general knowledge, coding, research, and more.
-            Be friendly and natural in your responses.
-            """;
-
-        Map<String, Object> requestBody = new HashMap<>();
-        requestBody.put("system", systemPrompt);
-        requestBody.put("prompt", userMessage);
-        requestBody.put("stream", false);
-
+        String visualSummary = "";
         if (image != null && !image.isEmpty()) {
-            if (image.startsWith("data:image")) {
-                image = image.substring(image.indexOf(",") + 1);
+            try {
+                Map<String, Object> visionBody = new HashMap<>();
+                visionBody.put("prompt", "Describe this image briefly.");
+                visionBody.put("stream", false);
+                String cleanImg = image.startsWith("data:image") ? image.substring(image.indexOf(",") + 1) : image;
+                visionBody.put("images", List.of(cleanImg));
+                String visionResp = callOllamaAPI(visionBody, MODEL_VISION);
+                visualSummary = objectMapper.readTree(visionResp).path("response").asText();
+            } catch (Exception e) {
+                log.warn("Vision summary failed in chat: {}", e.getMessage());
             }
-            requestBody.put("images", List.of(image));
         }
 
+        Map<String, Object> requestBody = new HashMap<>();
+        String systemPrompt = "You are Endless, a helpful AI assistant. Answer the user's question clearly.";
+        requestBody.put("system", systemPrompt);
+        
+        StringBuilder prompt = new StringBuilder();
+        if (!visualSummary.isEmpty()) {
+            prompt.append("[SCREEN CONTEXT]: ").append(visualSummary).append("\n\n");
+        }
+        prompt.append("USER: ").append(userMessage);
+        requestBody.put("prompt", prompt.toString());
+        requestBody.put("stream", false);
+
         try {
-            String responseStr = callOllamaAPI(requestBody, MODEL_VISION); // Vision chat defaults to vision model
+            String responseStr = callOllamaAPI(requestBody, MODEL_REASONING);
             JsonNode root = objectMapper.readTree(responseStr);
             return root.path("response").asText();
-
         } catch (Exception e) {
             log.error("Error in chat: ", e);
-            if (e.getMessage() != null && e.getMessage().contains("500")) {
-                return "The local AI (Ollama) hit an error (500). The image or DOM might be too large for your system. Try with a smaller window.";
-            }
-            return "Sorry, I encountered an error: " + e.getMessage() + "\nMake sure Ollama is running (`ollama run phi3:mini`).";
+            return "Error: " + e.getMessage();
         }
     }
 
@@ -172,7 +176,7 @@ public class AIService {
             try {
                 log.info("Two-Model Strategy: Calling moondream for visual analysis...");
                 Map<String, Object> visionBody = new HashMap<>();
-                visionBody.put("prompt", "Describe this webpage layout. List any quiz questions, form fields, and buttons you see. Be specific about their location relative to each other.");
+                visionBody.put("prompt", "What is visible on this screen? List any questions or primary UI elements you see.");
                 visionBody.put("stream", false);
                 
                 String cleanImg = screenshot;
@@ -225,6 +229,11 @@ public class AIService {
         reasoningBody.put("system", systemPrompt);
         reasoningBody.put("prompt", promptBuilder.toString());
         reasoningBody.put("stream", false);
+        
+        Map<String, Object> options = new HashMap<>();
+        options.put("temperature", 0.0);
+        options.put("num_predict", 500); 
+        reasoningBody.put("options", options);
 
         try {
             String responseStr = callOllamaAPI(reasoningBody, MODEL_REASONING);
