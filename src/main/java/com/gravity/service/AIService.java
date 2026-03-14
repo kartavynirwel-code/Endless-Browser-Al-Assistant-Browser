@@ -72,7 +72,6 @@ public class AIService {
             """;
 
         Map<String, Object> requestBody = new HashMap<>();
-        requestBody.put("model", MODEL_NAME);
         requestBody.put("system", systemPrompt);
         requestBody.put("stream", false);
 
