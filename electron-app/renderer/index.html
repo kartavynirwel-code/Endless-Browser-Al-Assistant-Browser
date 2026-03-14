@@ -1,0 +1,295 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Endless Browser</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/sockjs-client@1/dist/sockjs.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/stomp.js/2.3.3/stomp.min.js"></script>
+    <link rel="stylesheet" href="style.css">
+</head>
+
+<body>
+
+    <!-- Custom Title Bar -->
+    <header class="titlebar" id="titlebar">
+        <div class="titlebar-drag">
+            <div class="titlebar-brand">
+                <i class="fa-solid fa-atom"></i>
+                <span>Endless</span>
+            </div>
+        </div>
+        <div class="titlebar-controls">
+            <button class="titlebar-btn" id="minimizeBtn" title="Minimize"><i class="fa-solid fa-minus"></i></button>
+            <button class="titlebar-btn" id="maximizeBtn" title="Maximize"><i class="fa-regular fa-square"></i></button>
+            <button class="titlebar-btn close-btn" id="closeBtn" title="Close"><i
+                    class="fa-solid fa-xmark"></i></button>
+        </div>
+    </header>
+
+    <!-- Tab Bar -->
+    <nav class="tab-bar" id="tabBar">
+        <div class="tabs-container" id="tabsContainer"></div>
+        <button class="new-tab-btn" id="newTabBtn" title="New Tab (Ctrl+T)"><i class="fa-solid fa-plus"></i></button>
+        <div class="tab-bar-spacer"></div>
+        <button class="assistant-toggle" id="assistantToggle" title="Toggle Endless Assistant (Ctrl+/)">
+            <i class="fa-solid fa-sparkles"></i><span>Assistant</span>
+        </button>
+    </nav>
+
+    <!-- Navigation Bar -->
+    <div class="nav-bar" id="navBar">
+        <div class="nav-buttons">
+            <button class="nav-btn" id="backBtn" title="Back"><i class="fa-solid fa-arrow-left"></i></button>
+            <button class="nav-btn" id="forwardBtn" title="Forward"><i class="fa-solid fa-arrow-right"></i></button>
+            <button class="nav-btn" id="reloadBtn" title="Reload"><i class="fa-solid fa-rotate-right"></i></button>
+            <button class="nav-btn" id="homeBtn" title="Home"><i class="fa-solid fa-house"></i></button>
+        </div>
+        <div class="address-bar-wrapper">
+            <i class="fa-solid fa-lock address-icon" id="securityIcon"></i>
+            <input type="text" class="address-bar" id="addressBar" placeholder="Search Google or type a URL"
+                spellcheck="false">
+        </div>
+        <div class="nav-actions">
+            <button class="nav-btn" id="bookmarkBtn" title="Bookmark this page"><i class="fa-regular fa-star"
+                    id="bookmarkIcon"></i></button>
+            <button class="nav-btn" id="menuBtn" title="Menu"><i class="fa-solid fa-ellipsis-vertical"></i></button>
+        </div>
+    </div>
+
+    <!-- Menu Dropdown -->
+    <div class="menu-dropdown hidden" id="menuDropdown">
+        <div class="menu-item" id="menuBookmarks"><i class="fa-regular fa-star"></i> Bookmarks</div>
+        <div class="menu-item" id="menuHistory"><i class="fa-solid fa-clock-rotate-left"></i> History</div>
+        <div class="menu-divider"></div>
+        <div class="menu-item" id="menuDownloads"><i class="fa-solid fa-download"></i> Downloads</div>
+        <div class="menu-item" id="menuNewTab"><i class="fa-solid fa-plus"></i> New Tab</div>
+        <div class="menu-divider"></div>
+        <div class="menu-item" id="menuProfile"><i class="fa-solid fa-user-circle"></i> Profile</div>
+        <div class="menu-item" id="menuSettings"><i class="fa-solid fa-gear"></i> Settings</div>
+        <div class="menu-divider"></div>
+        <div class="menu-item" id="menuAbout"><i class="fa-solid fa-info-circle"></i> About Gravity</div>
+    </div>
+
+    <!-- Main Content Area -->
+    <div class="content-area" id="contentArea">
+        <div class="browser-pane" id="browserPane"></div>
+
+        <!-- AI Assistant Sidebar -->
+        <aside class="assistant-sidebar" id="assistantSidebar">
+            <header class="sidebar-header">
+                <div class="sidebar-brand">
+                    <div class="brand-icon"><i class="fa-solid fa-sparkles"></i></div>
+                    <div class="brand-text">
+                        <h2>Endless Assistant</h2>
+                        <div class="status-row">
+                            <div class="status-dot" id="statusDot"></div>
+                            <span class="status-text" id="statusText">Ready</span>
+                        </div>
+                    </div>
+                </div>
+                <button class="sidebar-close-btn" id="closeSidebarBtn" title="Close"><i
+                        class="fa-solid fa-xmark"></i></button>
+            </header>
+
+            <div class="sidebar-tabs">
+                <button class="sidebar-tab active" data-panel="chat-panel"><i class="fa-regular fa-comment-dots"></i>
+                    Chat</button>
+                <button class="sidebar-tab" data-panel="logs-panel"><i class="fa-solid fa-terminal"></i> Logs</button>
+            </div>
+
+            <div class="sidebar-panel active" id="chat-panel">
+                <div class="chat-messages" id="chatMessages">
+                    <div class="chat-msg assistant-msg">
+                        <div class="msg-avatar"><i class="fa-solid fa-sparkles"></i></div>
+                        <div class="msg-content">
+                            <div class="msg-text">Hi! I'm Endless, your AI assistant. Ask me anything or tell me to
+                                automate
+                                a task on the web!</div>
+                        </div>
+                    </div>
+                </div>
+                <div class="chat-input-area">
+                    <div id="imagePreviewContainer" class="hidden" style="padding: 8px; position: relative; width: max-content; margin-bottom: 5px;">
+                        <img id="imagePreview" src="" alt="Preview" style="max-height: 60px; border-radius: 4px; border: 1px solid var(--border-color);">
+                        <button id="removeImageBtn" style="position: absolute; top: 0; right: 0; background: var(--danger, #f87171); color: white; border: none; border-radius: 50%; width: 20px; height: 20px; cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 14px;">&times;</button>
+                    </div>
+                    <div class="chat-input-wrapper">
+                        <input type="file" id="mediaUpload" accept="image/*" style="display: none;">
+                        <button class="input-addon-btn" id="attachBtn" title="Attach"><i
+                                class="fa-solid fa-plus"></i></button>
+                        <textarea id="chatInput" placeholder="Ask Endless anything..." rows="1"></textarea>
+                        <button class="send-btn" id="sendBtn" title="Send"><i class="fa-solid fa-arrow-up"></i></button>
+                        <button class="stop-btn hidden" id="stopBtn" title="Stop"><i
+                                class="fa-solid fa-stop"></i></button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="sidebar-panel" id="logs-panel">
+                <div class="logs-container" id="logsContainer">
+                    <div class="log-entry info">[System] Endless Assistant initialized</div>
+                </div>
+            </div>
+        </aside>
+    </div>
+
+    <!-- Overlay Panels (Bookmarks, History, Settings, Profile) -->
+    <div class="overlay-panel hidden" id="bookmarksPanel">
+        <div class="overlay-panel-inner">
+            <div class="overlay-header">
+                <h2><i class="fa-solid fa-star"></i> Bookmarks</h2>
+                <button class="overlay-close" data-close-panel="bookmarksPanel"><i
+                        class="fa-solid fa-xmark"></i></button>
+            </div>
+            <div class="overlay-body" id="bookmarksList">
+                <div class="empty-state"><i class="fa-regular fa-star"></i>
+                    <p>No bookmarks yet. Click the star icon to bookmark pages.</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="overlay-panel hidden" id="historyPanel">
+        <div class="overlay-panel-inner">
+            <div class="overlay-header">
+                <h2><i class="fa-solid fa-clock-rotate-left"></i> History</h2>
+                <div class="overlay-header-actions">
+                    <button class="overlay-action-btn" id="clearHistoryBtn">Clear All</button>
+                    <button class="overlay-close" data-close-panel="historyPanel"><i
+                            class="fa-solid fa-xmark"></i></button>
+                </div>
+            </div>
+            <div class="overlay-body" id="historyList">
+                <div class="empty-state"><i class="fa-solid fa-clock-rotate-left"></i>
+                    <p>No browsing history yet.</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="overlay-panel hidden" id="settingsPanel">
+        <div class="overlay-panel-inner">
+            <div class="overlay-header">
+                <h2><i class="fa-solid fa-gear"></i> Settings</h2>
+                <button class="overlay-close" data-close-panel="settingsPanel"><i
+                        class="fa-solid fa-xmark"></i></button>
+            </div>
+            <div class="overlay-body">
+                <div class="settings-group">
+                    <h3>General</h3>
+                    <div class="setting-item">
+                        <label>Home Page</label>
+                        <input type="text" class="setting-input" id="settingHomePage" value="https://www.google.com">
+                    </div>
+                    <div class="setting-item">
+                        <label>Search Engine</label>
+                        <select class="setting-select" id="settingSearchEngine">
+                            <option value="google" selected>Google</option>
+                            <option value="bing">Bing</option>
+                            <option value="duckduckgo">DuckDuckGo</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="settings-group">
+                    <h3>AI Assistant</h3>
+                    <div class="setting-item">
+                        <label>Backend URL</label>
+                        <input type="text" class="setting-input" id="settingBackendUrl" value="http://localhost:8080">
+                    </div>
+                    <div class="setting-item">
+                        <label>Auto-open Assistant</label>
+                        <label class="toggle-switch">
+                            <input type="checkbox" id="settingAutoOpen">
+                            <span class="toggle-slider"></span>
+                        </label>
+                    </div>
+                </div>
+                <div class="settings-group">
+                    <h3>Appearance</h3>
+                    <div class="setting-item">
+                        <label>Accent Color</label>
+                        <div class="color-options" id="accentColorOptions">
+                            <button class="color-opt active" data-color="#7c6aff" style="background:#7c6aff;"></button>
+                            <button class="color-opt" data-color="#4ade80" style="background:#4ade80;"></button>
+                            <button class="color-opt" data-color="#f87171" style="background:#f87171;"></button>
+                            <button class="color-opt" data-color="#fbbf24" style="background:#fbbf24;"></button>
+                            <button class="color-opt" data-color="#38bdf8" style="background:#38bdf8;"></button>
+                            <button class="color-opt" data-color="#f472b6" style="background:#f472b6;"></button>
+                        </div>
+                    </div>
+                </div>
+                <button class="save-settings-btn" id="saveSettingsBtn"><i class="fa-solid fa-check"></i> Save
+                    Settings</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="overlay-panel hidden" id="profilePanel">
+        <div class="overlay-panel-inner">
+            <div class="overlay-header">
+                <h2><i class="fa-solid fa-user-circle"></i> Profile</h2>
+                <button class="overlay-close" data-close-panel="profilePanel"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <div class="overlay-body">
+                <div class="profile-card">
+                    <div class="profile-avatar"><i class="fa-solid fa-user"></i></div>
+                    <div class="profile-info">
+                        <input type="text" class="profile-name-input" id="profileName" placeholder="Your Name"
+                            value="User">
+                        <input type="email" class="profile-email-input" id="profileEmail"
+                            placeholder="email@example.com">
+                    </div>
+                </div>
+                <div class="profile-stats">
+                    <div class="stat-card">
+                        <div class="stat-number" id="statBookmarks">0</div>
+                        <div class="stat-label">Bookmarks</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-number" id="statHistory">0</div>
+                        <div class="stat-label">Visited</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-number" id="statTabs">1</div>
+                        <div class="stat-label">Open Tabs</div>
+                    </div>
+                </div>
+                <button class="save-settings-btn" id="saveProfileBtn"><i class="fa-solid fa-check"></i> Save
+                    Profile</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="overlay-panel hidden" id="aboutPanel">
+        <div class="overlay-panel-inner">
+            <div class="overlay-header">
+                <h2><i class="fa-solid fa-atom"></i> About Gravity</h2>
+                <button class="overlay-close" data-close-panel="aboutPanel"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <div class="overlay-body">
+                <div class="about-content">
+                    <div class="about-logo"><i class="fa-solid fa-atom"></i></div>
+                    <h1>Gravity Browser</h1>
+                    <p class="about-version">Version 1.0.0</p>
+                    <p class="about-desc">An AI-powered browser with a built-in assistant panel. Browse the web, ask
+                        questions,
+                        and automate tasks — all from one window.</p>
+                    <div class="about-tech">
+                        <span class="tech-badge">Electron</span>
+                        <span class="tech-badge">Spring Boot</span>
+                        <span class="tech-badge">Gemini AI</span>
+                        <span class="tech-badge">Selenium</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+
+</html>

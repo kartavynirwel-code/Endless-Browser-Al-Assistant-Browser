@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gravity - AI Browser Assistant</title>
+    <!-- Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
+    <!-- Custom CSS -->
+    <link rel="stylesheet" th:href="@{/css/style.css}">
+    <!-- SockJS & StompJS -->
+    <script src="https://cdn.jsdelivr.net/npm/sockjs-client@1/dist/sockjs.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/stomp.js/2.3.3/stomp.min.js"></script>
+    <!-- Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+
+<body>
+
+    <!-- Main Full Screen Browser View -->
+    <main class="browser-viewport" id="browserViewport">
+        <div class="overlay" id="browserOverlay">
+            <div class="loader"></div>
+            <p>Awaiting Instructions...</p>
+        </div>
+        <img id="liveScreenshot" src="" alt="Live Browser View" />
+
+        <!-- Toggle Button for Sidebar -->
+        <button id="sidebarToggleBtn" class="sidebar-toggle" title="Toggle Gravity Assistant">
+            <i class="fa-solid fa-sparkles"></i>
+        </button>
+    </main>
+
+    <!-- Floating Sidebar (Comet Style) -->
+    <aside class="gravity-sidebar active" id="gravitySidebar">
+        <!-- Sidebar Header -->
+        <header class="sidebar-header">
+            <div class="logo">
+                <i class="fa-solid fa-sparkles" style="color: var(--accent-color);"></i>
+                <h2>Gravity</h2>
+            </div>
+            <div class="header-actions">
+                <div class="status-indicator" id="globalStatus" title="Status">
+                    <div class="dot"></div>
+                </div>
+                <button id="closeSidebarBtn" class="icon-btn" title="Close"><i class="fa-solid fa-times"></i></button>
+            </div>
+        </header>
+
+        <!-- Tabs -->
+        <div class="sidebar-tabs">
+            <button class="tab-btn active" data-target="chat-panel">Chat</button>
+            <button class="tab-btn" data-target="logs-panel">Logs</button>
+        </div>
+
+        <!-- Chat Panel -->
+        <section class="panel-content active" id="chat-panel">
+            <div class="chat-history" id="chatHistory">
+                <div class="message system-msg">
+                    <div class="avatar"><i class="fa-solid fa-robot"></i></div>
+                    <div class="msg-bubble">How can I help you surf the web today?</div>
+                </div>
+            </div>
+
+            <div class="input-area">
+                <textarea id="instructionInput" placeholder="Ask anything to Gravity..." rows="1"></textarea>
+                <div class="input-actions">
+                    <button id="stopBtn" class="action-btn danger hidden" title="Stop Task"><i
+                            class="fa-solid fa-stop"></i></button>
+                    <button id="startBtn" class="action-btn primary" title="Send"><i
+                            class="fa-solid fa-arrow-up"></i></button>
+                </div>
+            </div>
+        </section>
+
+        <!-- Logs Panel -->
+        <section class="panel-content" id="logs-panel">
+            <div class="logs-container" id="logsContainer">
+                <!-- Logs will appear here -->
+            </div>
+        </section>
+    </aside>
+
+    <!-- App JS -->
+    <script th:src="@{/js/app.js}"></script>
+</body>
+
+</html>

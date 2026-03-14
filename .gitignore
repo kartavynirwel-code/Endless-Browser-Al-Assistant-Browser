@@ -1,0 +1,28 @@
+# Compiled class files
+target/
+*.class
+
+# Log files
+*.log
+
+# Package files
+*.jar
+*.war
+*.ear
+
+# Electron stuff
+node_modules/
+dist/
+build/
+*.exe
+*.dmg
+*.AppImage
+
+# IDE files
+.idea/
+*.iml
+.vscode/
+
+# Local configuration
+application.properties.local
+.env
