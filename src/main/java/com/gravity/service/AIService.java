@@ -176,7 +176,7 @@ public class AIService {
             try {
                 log.info("Two-Model Strategy: Calling moondream for visual analysis...");
                 Map<String, Object> visionBody = new HashMap<>();
-                visionBody.put("prompt", "What is visible on this screen? List any questions or primary UI elements you see.");
+                visionBody.put("prompt", "Analyze this webpage. Describe the main sections, any forms, navigation menus, and what the page is about. Help me understand how to interact with it.");
                 visionBody.put("stream", false);
                 
                 String cleanImg = screenshot;
@@ -195,36 +195,36 @@ public class AIService {
 
         // --- STEP 2: REASONING (phi3:mini) ---
         String systemPrompt = """
-            SYSTEM: You are a Senior Java Developer and Browser Automation Specialist. 
-            You must analyze the VISUAL summary, the full PAGE TEXT, and the DOM elements to complete the task.
+            SYSTEM: You are an Expert Web Automation & Intelligence Agent. 
+            You must analyze the VISUAL layout, the full PAGE TEXT transcript, and the technical DOM elements to fulfill the USER COMMAND.
             
-            GOAL: Correcty answer all quiz questions and interact with the page.
+            GOAL: Efficiently and accurately complete the user's request on any website.
             
-            RULES for Answering:
-            1. READ the questions from the "PAGE TEXT TRANSCRIPT". 
-            2. For each question, find the corresponding input element's data-gravity-id in the "DOM ELEMENTS" map.
-            3. Use your Java knowledge to provide the most accurate, concise, and professional answers.
-            4. Answer ALL questions before performing any "Submit" or destructive actions.
-            5. ONLY respond with the JSON array format below. NO other text.
+            OPERATIONAL RULES:
+            1. CLARITY: Use "PAGE TEXT" to understand the content, labels, and context of the page.
+            2. MAPPING: Match your intended action to the correct data-gravity-id in the "DOM ELEMENTS" map.
+            3. ACTION TYPES: 
+               - 'type': For inputs, textareas, or search boxes.
+               - 'click': For buttons, links, radio buttons, or checkboxes.
+               - 'select': To choose an option from a dropdown (value should be the option text).
+            4. ACCURACY: Provide professional and logical values for form-filling or answering.
+            5. COMPLETION: Only click "Submit", "Search", or destructive buttons if the user explicitly requested it or if all prerequisites are met.
+            6. OUTPUT: Respond ONLY with a JSON array of actions. No conversational text.
             
-            Action schema:
+            Action schema example:
             [
               {
                 "action": "type",
-                "targetId": <number>,
-                "value": "<accurate_answer>",
-                "reason": "Answering: <question_text>"
+                "targetId": 12,
+                "value": "Search query",
+                "reason": "Typing the search query into the search box"
               },
-              ...
               {
                 "action": "click",
-                "targetId": <submit_button_id>,
-                "reason": "Submitting the quiz after answering everything"
+                "targetId": 15,
+                "reason": "Clicking the search button"
               }
             ]
-            
-            CRITICAL: If all questions are answered, and the user command says "submit", click the submit button. 
-            If not, just return [{"action": "done"}].
             """;
 
         StringBuilder promptBuilder = new StringBuilder();
