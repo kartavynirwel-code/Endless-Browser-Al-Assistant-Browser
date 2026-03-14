@@ -29,13 +29,15 @@ public class AIService {
             .build();
 
     private static final String OLLAMA_URL = "http://localhost:11434/api/generate";
-    private static final String MODEL_NAME = "phi3:mini";
+    private static final String MODEL_REASONING = "phi3:mini";
+    private static final String MODEL_VISION = "moondream";
 
     /**
-     * Calls Local Ollama API
+     * Calls Local Ollama API with specific model
      */
-    private String callOllamaAPI(Map<String, Object> requestBody) throws Exception {
-        log.info("Sending request to local Ollama API (Model: {})...", MODEL_NAME);
+    private String callOllamaAPI(Map<String, Object> requestBody, String modelName) throws Exception {
+        log.info("Sending request to local Ollama API (Model: {})...", modelName);
+        requestBody.put("model", modelName);
 
         return webClient.post()
                 .uri(OLLAMA_URL)
@@ -43,7 +45,7 @@ public class AIService {
                 .bodyValue(requestBody)
                 .retrieve()
                 .bodyToMono(String.class)
-                .timeout(Duration.ofMinutes(5)) // Local models can take a while
+                .timeout(Duration.ofMinutes(5))
                 .block(Duration.ofMinutes(5));
     }
 
@@ -151,7 +153,7 @@ public class AIService {
         }
 
         try {
-            String responseStr = callOllamaAPI(requestBody);
+            String responseStr = callOllamaAPI(requestBody, MODEL_VISION); // Vision chat defaults to vision model
             JsonNode root = objectMapper.readTree(responseStr);
             return root.path("response").asText();
 
@@ -160,15 +162,39 @@ public class AIService {
             if (e.getMessage() != null && e.getMessage().contains("500")) {
                 return "The local AI (Ollama) hit an error (500). The image or DOM might be too large for your system. Try with a smaller window.";
             }
-            return "Sorry, I encountered an error: " + e.getMessage() + "\nMake sure Ollama is running (`ollama run llava`).";
+            return "Sorry, I encountered an error: " + e.getMessage() + "\nMake sure Ollama is running (`ollama run phi3:mini`).";
         }
     }
 
     public List<Map<String, Object>> generateAutomationActions(String command, String screenshot, List<Map<String, Object>> dom, List<String> history, String pageText) {
+        String visualSummary = "No visual analysis performed.";
+
+        // --- STEP 1: VISION (moondream) ---
+        if (screenshot != null && !screenshot.isEmpty()) {
+            try {
+                log.info("Two-Model Strategy: Calling moondream for visual analysis...");
+                Map<String, Object> visionBody = new HashMap<>();
+                visionBody.put("prompt", "Describe this webpage layout. List any quiz questions, form fields, and buttons you see. Be specific about their location relative to each other.");
+                visionBody.put("stream", false);
+                
+                String cleanImg = screenshot;
+                if (cleanImg.startsWith("data:image")) {
+                    cleanImg = cleanImg.substring(cleanImg.indexOf(",") + 1);
+                }
+                visionBody.put("images", List.of(cleanImg));
+                
+                String visionResp = callOllamaAPI(visionBody, MODEL_VISION);
+                visualSummary = objectMapper.readTree(visionResp).path("response").asText();
+                log.info("Visual Summary from moondream: {}", visualSummary);
+            } catch (Exception e) {
+                log.warn("moondream vision analysis failed, falling back to text only: {}", e.getMessage());
+            }
+        }
+
+        // --- STEP 2: REASONING (phi3:mini) ---
         String systemPrompt = """
-            SYSTEM: You are a browser automation agent. You receive a webpage screenshot,
-            a full text transcript of the page, a DOM element map, and a user command.
-            You must respond ONLY with a valid JSON array of actions.
+            SYSTEM: You are a browser automation brain (phi3:mini). Using the visual analysis,
+            page text transcript, and DOM map, you must respond ONLY with a JSON array of actions.
             
             Action schema:
             [
@@ -180,52 +206,34 @@ public class AIService {
               }
             ]
             
-            CRITICAL RULES:
-            1. Use "PAGE TEXT" to find the actual quiz questions and content.
-            2. Match the question context to the "DOM ELEMENTS" to find the right data-gravity-id.
-            3. Answer ALL questions on the page before clicking any "Submit" or "Done" button.
-            4. If all answers are filled and user asked to submit, click Submit. Otherwise return [{"action": "done"}].
+            RULES:
+            1. Use "VISUAL ANALYSIS" and "PAGE TEXT" to find the quiz answers.
+            2. Match those to the correct "targetId" in the "DOM ELEMENTS" map.
+            3. Fully answer all visible questions before clicking 'Submit'.
+            4. If no more actions needed, return [{"action": "done"}].
             """;
-
-        if (screenshot != null && screenshot.startsWith("data:image")) {
-            screenshot = screenshot.substring(screenshot.indexOf(",") + 1);
-        }
 
         StringBuilder promptBuilder = new StringBuilder();
         promptBuilder.append("USER COMMAND: ").append(command).append("\n\n");
-        promptBuilder.append("PAGE TEXT (Content extract):\n").append(pageText != null ? pageText : "No text extracted").append("\n\n");
+        promptBuilder.append("VISUAL ANALYSIS (from moondream):\n").append(visualSummary).append("\n\n");
+        promptBuilder.append("PAGE TEXT TRANSCRIPT:\n").append(pageText != null ? pageText : "No text extracted").append("\n\n");
         if (history != null && !history.isEmpty()) {
-            promptBuilder.append("PREVIOUS STEPS HISTORY:\n");
+            promptBuilder.append("HISTORY:\n");
             history.forEach(h -> promptBuilder.append("- ").append(h).append("\n"));
         }
-        promptBuilder.append("\nDOM ELEMENTS (interactive items only):\n").append(dom.toString());
+        promptBuilder.append("\nDOM ELEMENTS:\n").append(dom.toString());
 
-        Map<String, Object> requestBody = new HashMap<>();
-        requestBody.put("model", MODEL_NAME);
-        requestBody.put("system", systemPrompt);
-        requestBody.put("prompt", promptBuilder.toString());
-        requestBody.put("stream", false);
-
-        if (screenshot != null) {
-            requestBody.put("images", List.of(screenshot));
-        }
+        Map<String, Object> reasoningBody = new HashMap<>();
+        reasoningBody.put("system", systemPrompt);
+        reasoningBody.put("prompt", promptBuilder.toString());
+        reasoningBody.put("stream", false);
 
         try {
-            String responseStr = callOllamaAPI(requestBody);
-            JsonNode root = objectMapper.readTree(responseStr);
-            String actionsJson = root.path("response").asText();
-            
-            // For JSON Arrays, manual parsing is safer than Ollama's format:json
-            int start = actionsJson.indexOf("[");
-            int end = actionsJson.lastIndexOf("]");
-            if (start != -1 && end != -1) {
-                actionsJson = actionsJson.substring(start, end + 1);
-            }
-            
-            return objectMapper.readValue(actionsJson, List.class);
+            String responseStr = callOllamaAPI(reasoningBody, MODEL_REASONING);
+            return parseResponse(responseStr);
         } catch (Exception e) {
-            log.error("Error generating actions: ", e);
-            return List.of(Map.of("action", "done", "reason", "Error: " + e.getMessage()));
+            log.error("Reasoning failed: ", e);
+            return List.of(Map.of("action", "error", "reason", e.getMessage()));
         }
     }
 }
