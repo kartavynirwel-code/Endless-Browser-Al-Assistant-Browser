@@ -97,8 +97,8 @@ public class AIService {
         }
 
         try {
-            String responseStr = callOllamaAPI(requestBody);
-            return parseResponse(responseStr);
+            String responseStr = callOllamaAPI(requestBody, MODEL_REASONING);
+            return parseAIResponse(responseStr);
 
         } catch (Exception e) {
             log.error("Error calling Ollama API: ", e);
@@ -109,7 +109,7 @@ public class AIService {
         }
     }
 
-    private AIResponse parseResponse(String rawResponse) throws JsonProcessingException {
+    private AIResponse parseAIResponse(String rawResponse) throws JsonProcessingException {
         JsonNode root = objectMapper.readTree(rawResponse);
         String textContent = root.path("response").asText();
 
@@ -140,7 +140,6 @@ public class AIService {
             """;
 
         Map<String, Object> requestBody = new HashMap<>();
-        requestBody.put("model", MODEL_NAME);
         requestBody.put("system", systemPrompt);
         requestBody.put("prompt", userMessage);
         requestBody.put("stream", false);
@@ -230,10 +229,26 @@ public class AIService {
 
         try {
             String responseStr = callOllamaAPI(reasoningBody, MODEL_REASONING);
-            return parseResponse(responseStr);
+            return parseActionList(responseStr);
         } catch (Exception e) {
             log.error("Reasoning failed: ", e);
             return List.of(Map.of("action", "error", "reason", e.getMessage()));
         }
+    }
+
+    private List<Map<String, Object>> parseActionList(String rawResponse) throws JsonProcessingException {
+        JsonNode root = objectMapper.readTree(rawResponse);
+        String actionsJson = root.path("response").asText();
+
+        // For JSON Arrays, manual parsing is safer than Ollama's format:json
+        int start = actionsJson.indexOf("[");
+        int end = actionsJson.lastIndexOf("]");
+        if (start != -1 && end != -1) {
+            actionsJson = actionsJson.substring(start, end + 1);
+        } else {
+            return List.of(); // or some default action
+        }
+
+        return objectMapper.readValue(actionsJson, List.class);
     }
 }
