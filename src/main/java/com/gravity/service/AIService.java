@@ -157,6 +157,9 @@ public class AIService {
 
         } catch (Exception e) {
             log.error("Error in chat: ", e);
+            if (e.getMessage() != null && e.getMessage().contains("500")) {
+                return "The local AI (Ollama) hit an error (500). The image or DOM might be too large for your system. Try with a smaller window.";
+            }
             return "Sorry, I encountered an error: " + e.getMessage() + "\nMake sure Ollama is running (`ollama run llava`).";
         }
     }

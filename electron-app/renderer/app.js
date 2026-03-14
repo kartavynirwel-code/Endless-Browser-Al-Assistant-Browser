@@ -613,7 +613,7 @@ async function appendAssistantMessage(text) {
     for (let i = 0; i < words.length; i++) {
         textEl.textContent += words[i] + (i === words.length - 1 ? '' : ' ');
         scrollChat();
-        await new Promise(r => setTimeout(r, 40)); // speed of word typing
+        await new Promise(r => setTimeout(r, 25)); // Slightly faster: 25ms per word
     }
 }
 
@@ -765,32 +765,34 @@ async function runAutomationTask(instruction) {
         for (let step = 0; step < maxSteps && automationRunning; step++) {
             appendLog(`Step ${step + 1}: Capturing screen and DOM...`);
             
-            // 1. Capture screen
+            // 1. Capture screen (JPEG 0.6 for smaller payload)
             const image = await wv.capturePage();
-            const base64Img = image.toDataURL();
+            const base64Img = image.toDataURL('image/jpeg', 0.6);
             appendAssistantImage(base64Img);
 
             // 1b. Extract detailed DOM structure (Step 1)
             const domElements = await wv.executeJavaScript(`
                 (() => {
                     const results = [];
+                    // Only target visible and actually relevant elements
                     document.querySelectorAll(
-                        'input, button, select, textarea, [role="button"], a, label'
+                        'input:not([type="hidden"]), button, select, textarea, [role="button"], a'
                     ).forEach((el, i) => {
-                        el.setAttribute('data-gravity-id', i);
                         const rect = el.getBoundingClientRect();
+                        if (rect.width === 0 || rect.height === 0) return;
+                        
+                        el.setAttribute('data-gravity-id', i);
                         results.push({
                             id: i,
                             tag: el.tagName,
                             type: el.type || '',
                             placeholder: el.placeholder || '',
-                            text: el.innerText ? el.innerText.trim().substring(0, 50) : '',
+                            text: el.innerText ? el.innerText.trim().substring(0, 40) : '',
                             name: el.name || '',
-                            ariaLabel: el.getAttribute('aria-label') || '',
-                            rect: { x: rect.left, y: rect.top, w: rect.width, h: rect.height }
+                            rect: { x: Math.round(rect.left), y: Math.round(rect.top), w: Math.round(rect.width), h: Math.round(rect.height) }
                         });
                     });
-                    return results;
+                    return results.slice(0, 60); // Max 60 elements for context window safety
                 })()
             `);
 
