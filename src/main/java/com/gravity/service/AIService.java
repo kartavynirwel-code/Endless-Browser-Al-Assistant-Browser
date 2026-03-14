@@ -159,8 +159,9 @@ public class AIService {
             log.error("Error in chat: ", e);
             return "Sorry, I encountered an error: " + e.getMessage() + "\nMake sure Ollama is running (`ollama run llava`).";
         }
+    }
 
-    public List<Map<String, Object>> generateAutomationActions(String command, String screenshot, List<Map<String, Object>> dom) {
+    public List<Map<String, Object>> generateAutomationActions(String command, String screenshot, List<Map<String, Object>> dom, List<String> history) {
         String systemPrompt = """
             SYSTEM: You are a browser automation agent. You receive a webpage screenshot,
             a DOM element map, and a user command. You must respond ONLY with a valid 
@@ -176,6 +177,8 @@ public class AIService {
               }
             ]
             
+            If the task is complete, return [{"action": "done", "reason": "Task finished"}].
+            
             If the page contains quiz/MCQ questions, identify the correct answer 
             using your knowledge and select the right option.
             """;
@@ -184,12 +187,19 @@ public class AIService {
             screenshot = screenshot.substring(screenshot.indexOf(",") + 1);
         }
 
+        StringBuilder promptBuilder = new StringBuilder();
+        promptBuilder.append("USER COMMAND: ").append(command).append("\n");
+        if (history != null && !history.isEmpty()) {
+            promptBuilder.append("PREVIOUS STEPS HISTORY:\n");
+            history.forEach(h -> promptBuilder.append("- ").append(h).append("\n"));
+        }
+        promptBuilder.append("DOM MAP: ").append(dom.toString());
+
         Map<String, Object> requestBody = new HashMap<>();
         requestBody.put("model", MODEL_NAME);
         requestBody.put("system", systemPrompt);
-        requestBody.put("prompt", "USER COMMAND: " + command + "\nDOM MAP: " + dom.toString());
+        requestBody.put("prompt", promptBuilder.toString());
         requestBody.put("stream", false);
-        requestBody.put("format", "json");
 
         if (screenshot != null) {
             requestBody.put("images", List.of(screenshot));
@@ -199,6 +209,13 @@ public class AIService {
             String responseStr = callOllamaAPI(requestBody);
             JsonNode root = objectMapper.readTree(responseStr);
             String actionsJson = root.path("response").asText();
+            
+            // For JSON Arrays, manual parsing is safer than Ollama's format:json
+            int start = actionsJson.indexOf("[");
+            int end = actionsJson.lastIndexOf("]");
+            if (start != -1 && end != -1) {
+                actionsJson = actionsJson.substring(start, end + 1);
+            }
             
             return objectMapper.readValue(actionsJson, List.class);
         } catch (Exception e) {

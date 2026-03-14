@@ -24,21 +24,22 @@ public class AutomationController {
         List<Map<String, Object>> actions = aiService.generateAutomationActions(
                 request.getCommand(),
                 request.getScreenshot(),
-                request.getDom()
+                request.getDom(),
+                request.getHistory()
         );
 
         // Step 4: Store initial history
-        AutomationHistory history = new AutomationHistory();
-        history.setCommand(request.getCommand());
-        history.setUrl(request.getUrl());
-        // Simple serialization for storage
         try {
+            AutomationHistory history = new AutomationHistory();
+            history.setCommand(request.getCommand());
+            history.setUrl(request.getUrl());
             history.setActionsJson(actions.toString());
+            history.setStatus(AutomationHistory.Status.PARTIAL);
+            historyRepository.save(history);
         } catch (Exception e) {
-            history.setActionsJson("Error serializing actions");
+            // Log database error but don't fail the automation
+            System.err.println("Database error: " + e.getMessage());
         }
-        history.setStatus(AutomationHistory.Status.PARTIAL); // Marked SUCCESS by frontend later
-        historyRepository.save(history);
 
         return actions;
     }
@@ -49,5 +50,6 @@ public class AutomationController {
         private String screenshot;
         private List<Map<String, Object>> dom;
         private String url;
+        private List<String> history;
     }
 }

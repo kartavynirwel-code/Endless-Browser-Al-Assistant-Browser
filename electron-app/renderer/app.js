@@ -599,14 +599,22 @@ function appendUserMessage(text) {
     scrollChat();
 }
 
-function appendAssistantMessage(text) {
+async function appendAssistantMessage(text) {
     if (!text || !text.trim()) return;
     removeThinkingIndicator();
     const div = document.createElement('div');
     div.className = 'chat-msg assistant-msg';
-    div.innerHTML = `<div class="msg-avatar"><i class="fa-solid fa-sparkles"></i></div><div class="msg-content"><div class="msg-text">${escapeHtml(text)}</div></div>`;
+    div.innerHTML = `<div class="msg-avatar"><i class="fa-solid fa-sparkles"></i></div><div class="msg-content"><div class="msg-text"></div></div>`;
     dom.chatMessages.appendChild(div);
-    scrollChat();
+    const textEl = div.querySelector('.msg-text');
+    
+    // Typing effect (word-by-word)
+    const words = text.split(' ');
+    for (let i = 0; i < words.length; i++) {
+        textEl.textContent += words[i] + (i === words.length - 1 ? '' : ' ');
+        scrollChat();
+        await new Promise(r => setTimeout(r, 40)); // speed of word typing
+    }
 }
 
 function appendAssistantImage(base64Image) {
@@ -693,7 +701,7 @@ async function executeActions(wv, actions) {
                             el.value = '';
                             const chars = ${JSON.stringify(value)}.split('');
                             for (let i = 0; i < chars.length; i++) {
-                                await new Promise(r => setTimeout(r, 50));
+                                await new Promise(r => setTimeout(r, 30)); // slightly faster typing: 30ms
                                 el.value += chars[i];
                                 el.dispatchEvent(new Event('input', { bubbles: true }));
                                 el.dispatchEvent(new Event('change', { bubbles: true }));
@@ -748,70 +756,85 @@ async function runAutomationTask(instruction) {
     }
 
     automationRunning = true;
+    let stepHistory = [];
+    let maxSteps = 10; // safety limit
+    
     document.getElementById('automationOverlay').classList.remove('hidden');
 
     try {
-        appendAssistantMessage('📸 Capturing screen and DOM for Step 1...');
-        
-        // 1. Capture screen
-        const image = await wv.capturePage();
-        const base64Img = image.toDataURL();
-        appendAssistantImage(base64Img);
+        for (let step = 0; step < maxSteps && automationRunning; step++) {
+            appendLog(`Step ${step + 1}: Capturing screen and DOM...`);
+            
+            // 1. Capture screen
+            const image = await wv.capturePage();
+            const base64Img = image.toDataURL();
+            appendAssistantImage(base64Img);
 
-        // 1b. Extract detailed DOM structure (Step 1)
-        const domElements = await wv.executeJavaScript(`
-            (() => {
-                const results = [];
-                document.querySelectorAll(
-                    'input, button, select, textarea, [role="button"], a, label'
-                ).forEach((el, i) => {
-                    el.setAttribute('data-gravity-id', i);
-                    const rect = el.getBoundingClientRect();
-                    results.push({
-                        id: i,
-                        tag: el.tagName,
-                        type: el.type || '',
-                        placeholder: el.placeholder || '',
-                        text: el.innerText ? el.innerText.trim().substring(0, 50) : '',
-                        name: el.name || '',
-                        ariaLabel: el.getAttribute('aria-label') || '',
-                        rect: { x: rect.left, y: rect.top, w: rect.width, h: rect.height }
+            // 1b. Extract detailed DOM structure (Step 1)
+            const domElements = await wv.executeJavaScript(`
+                (() => {
+                    const results = [];
+                    document.querySelectorAll(
+                        'input, button, select, textarea, [role="button"], a, label'
+                    ).forEach((el, i) => {
+                        el.setAttribute('data-gravity-id', i);
+                        const rect = el.getBoundingClientRect();
+                        results.push({
+                            id: i,
+                            tag: el.tagName,
+                            type: el.type || '',
+                            placeholder: el.placeholder || '',
+                            text: el.innerText ? el.innerText.trim().substring(0, 50) : '',
+                            name: el.name || '',
+                            ariaLabel: el.getAttribute('aria-label') || '',
+                            rect: { x: rect.left, y: rect.top, w: rect.width, h: rect.height }
+                        });
                     });
-                });
-                return results;
-            })()
-        `);
+                    return results;
+                })()
+            `);
 
-        // 2. Query the new Backend Execute Endpoint (Step 2)
-        const backendUrl = settings.backendUrl || BACKEND_URL;
-        const currentUrl = wv.getURL();
-        
-        appendAssistantMessage('🧠 AI is thinking about the steps (Step 2)...');
-        handleStatus('thinking');
+            // 2. Query the new Backend Execute Endpoint (Step 2)
+            const backendUrl = settings.backendUrl || BACKEND_URL;
+            const currentUrl = wv.getURL();
+            
+            appendAssistantMessage(`Step ${step + 1}: AI is thinking...`);
+            handleStatus('thinking');
 
-        const resp = await fetch(backendUrl + '/api/automation/execute', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ 
-                command: instruction, 
-                screenshot: base64Img, 
-                dom: domElements,
-                url: currentUrl
-            })
-        });
+            const resp = await fetch(backendUrl + '/api/automation/execute', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ 
+                    command: instruction, 
+                    screenshot: base64Img, 
+                    dom: domElements,
+                    url: currentUrl,
+                    history: stepHistory
+                })
+            });
 
-        if (!resp.ok) {
-            appendAssistantMessage('Automation backend error.');
-            handleStatus('idle');
-            return;
+            if (!resp.ok) {
+                appendAssistantMessage('Automation backend error.');
+                break;
+            }
+
+            const actions = await resp.json();
+            
+            // If AI says "done", stop the loop
+            if (actions.length === 0 || actions[0]?.action === 'done') {
+                appendAssistantMessage('✅ Task complete!');
+                break;
+            }
+
+            // 3. Act (Step 3)
+            handleStatus('acting');
+            await executeActions(wv, actions);
+            
+            stepHistory.push(`Step ${step + 1}: Executed ${actions.length} actions: ${actions.map(a => a.reason).join(', ')}`);
+            
+            // Wait for page to settle
+            await new Promise(r => setTimeout(r, 1500));
         }
-
-        const actions = await resp.json();
-        
-        // 3. Act (Step 3)
-        handleStatus('acting');
-        await executeActions(wv, actions);
-        appendAssistantMessage('✅ Automation task sequence finished.');
 
     } catch (e) {
         appendLog(`Automation loop error: ${e.message}`, 'error');
@@ -840,7 +863,11 @@ async function sendMessage() {
     if (!isSidebarOpen) toggleSidebar();
     showThinkingIndicator();
 
-    const isAutomation = text && (text.toLowerCase().startsWith('/do ') || text.toLowerCase().includes('navigate to') || text.toLowerCase().includes('click on') || text.toLowerCase().includes('fill') || text.toLowerCase().includes('go to') || text.toLowerCase().includes('open ') || text.toLowerCase().includes('search for'));
+    const isAutomation = text && (
+        text.toLowerCase().startsWith('/do ') ||
+        text.toLowerCase().startsWith('automate ') ||
+        text.toLowerCase().startsWith('do task:')
+    );
 
     const backendUrl = settings.backendUrl || BACKEND_URL;
 
