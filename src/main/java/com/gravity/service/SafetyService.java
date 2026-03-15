@@ -13,17 +13,27 @@ public class SafetyService {
                                || command.toLowerCase().contains("buy")
                                || command.toLowerCase().contains("pay");
 
+        List<Map<String, Object>> safeActions = new java.util.ArrayList<>();
+        String blockedReason = null;
+
         for (Map<String, Object> action : actions) {
-            String reason = (String) action.get("reason");
-            String type = (String) action.get("action");
+            String reason = (String) action.getOrDefault("reason", "");
+            String type = (String) action.getOrDefault("action", "");
             
             if (isDestructive(type, reason)) {
                 if (!userWantsSubmit) {
-                    return new SafetyResult(Status.NEEDS_CONFIRMATION, "AI attempted a destructive action: " + reason);
+                    blockedReason = reason;
+                    continue; // Skip destructive action
                 }
             }
+            safeActions.add(action);
         }
-        return new SafetyResult(Status.SAFE, "All actions approved.");
+
+        if (blockedReason != null) {
+            return new SafetyResult(Status.NEEDS_CONFIRMATION, 
+                "AI attempted a destructive action: " + blockedReason, safeActions);
+        }
+        return new SafetyResult(Status.SAFE, "All actions approved.", safeActions);
     }
 
     private boolean isDestructive(String type, String reason) {
@@ -36,6 +46,7 @@ public class SafetyService {
     public static class SafetyResult {
         private final Status status;
         private final String message;
+        private final List<Map<String, Object>> safeActions;
     }
 
     public enum Status {

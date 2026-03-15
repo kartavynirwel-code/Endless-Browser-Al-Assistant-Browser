@@ -75,7 +75,7 @@ public class ReasoningService {
     }
 
     private String sanitize(String input) {
-        return input.replaceAll("\\d+\\.\\d+", ""); // Simple coordinate removal
+        return input; // Remove coordinates sanitization as it corrupts IDs
     }
 
     private List<Map<String, Object>> parseActionList(String json) throws JsonProcessingException {

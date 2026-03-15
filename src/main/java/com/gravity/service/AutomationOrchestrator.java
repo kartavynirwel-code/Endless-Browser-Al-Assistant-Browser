@@ -47,7 +47,7 @@ public class AutomationOrchestrator {
 
         // 6. Return Result
         StepResult result = new StepResult();
-        result.setActions(actions);
+        result.setActions(safety.getSafeActions());
         result.setStatus(safety.getStatus() == SafetyService.Status.SAFE ? "RUNNING" : "NEEDS_CONFIRMATION");
         result.setMessage(safety.getMessage());
         
