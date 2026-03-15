@@ -664,35 +664,27 @@ function appendLog(text) {
 // NATIVE AUTOMATION
 // ==============================================
 
-async function executeActions(wv, actions, originalCommand) {
-    const userWantsSubmit = originalCommand.toLowerCase().includes('submit');
-
+async function executeActions(wv, actions) {
     for (const action of actions) {
         if (!automationRunning) break;
         
-        await new Promise(resolve => setTimeout(resolve, 600)); // human-like delay
+        await new Promise(resolve => setTimeout(resolve, 800 + Math.random() * 1200));
         const { action: type, targetId, value, reason } = action;
         
         appendLog(`Action: ${type} - ${reason}`, 'acting');
         if (reason) appendAssistantMessage(`🤖 ${reason}`);
 
-        // Safety Layer: Detect destructive actions (Submit)
-        const destructiveKeywords = ['submit', 'buy', 'purchase', 'pay'];
-        if (destructiveKeywords.some(kw => reason?.toLowerCase().includes(kw) || type === 'submit')) {
-            if (userWantsSubmit) {
-                appendLog('Auto-proceeding with submission as requested in command.', 'info');
-            } else {
-                appendAssistantMessage('🛑 Stopping: AI reached a "Submit" action, but you didn\'t ask to "submit" in your command. You can manually click Submit now.');
-                automationRunning = false;
-                return false; 
-            }
-        }
-
         try {
             switch(type) {
                 case 'click':
                     await wv.executeJavaScript(`
-                        document.querySelector('[data-gravity-id="${targetId}"]').click()
+                        (() => {
+                            const el = document.querySelector('[data-gravity-id="${targetId}"]');
+                            if (!el) { console.warn('Element not found: ${targetId}'); return; }
+                            el.dispatchEvent(new MouseEvent('mouseover', { bubbles: true }));
+                            el.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
+                            el.click();
+                        })()
                     `);
                     break;
                     
@@ -755,73 +747,76 @@ async function runAutomationTask(instruction) {
     }
 
     automationRunning = true;
-    let stepHistory = [];
-    let maxSteps = 10; // safety limit
-    
+    const backendUrl = settings.backendUrl || BACKEND_URL;
     document.getElementById('automationOverlay').classList.remove('hidden');
 
     try {
-        for (let step = 0; step < maxSteps && automationRunning; step++) {
+        // 1. Start session
+        appendLog('Starting automation session...');
+        const startResp = await fetch(backendUrl + '/api/automation/start', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ command: instruction })
+        });
+        const session = await startResp.json();
+        const sessionId = session.id;
+
+        for (let step = 0; step < 10 && automationRunning; step++) {
             appendLog(`Step ${step + 1}: Capturing screen and DOM...`);
             
-            // 1. Capture screen (JPEG 0.6 for smaller payload)
             const image = await wv.capturePage();
             const base64Img = image.toDataURL('image/jpeg', 0.6);
             appendAssistantImage(base64Img);
 
-            // 1b. Extract detailed DOM structure (Step 1)
+            // Extract DOM
             const domElements = await wv.executeJavaScript(`
                 (() => {
                     const results = [];
-                    // Capture interactive elements AND text context (questions)
                     document.querySelectorAll(
                         'input:not([type="hidden"]), button, select, textarea, [role="button"], a, p, span, label, h1, h2, h3'
                     ).forEach((el, i) => {
                         const rect = el.getBoundingClientRect();
                         if (rect.width === 0 || rect.height === 0) return;
-                        
                         const tag = el.tagName.toLowerCase();
                         const isInteractive = ['input', 'button', 'select', 'textarea', 'a'].includes(tag) || el.getAttribute('role') === 'button';
-                        
-                        // Assign ID only to interactive elements for automation
-                        if (isInteractive) {
-                            el.setAttribute('data-gravity-id', i);
+                        if (isInteractive) el.setAttribute('data-gravity-id', i);
+
+                        let labelText = '';
+                        if (tag === 'input' && (el.type === 'radio' || el.type === 'checkbox')) {
+                            const label = document.querySelector('label[for="' + el.id + '"]') || el.closest('label');
+                            if (label) labelText = label.innerText;
                         }
 
                         results.push({
                             id: isInteractive ? i : null,
                             tag: tag,
                             type: el.type || '',
-                            text: el.innerText ? el.innerText.trim().substring(0, 100) : '',
-                            placeholder: el.placeholder || '',
+                            value: el.value || '',
+                            text: (el.innerText || '').trim().substring(0, 100),
+                            labelText: labelText.trim(),
                             isInteractive: isInteractive,
-                            rect: { x: Math.round(rect.left), y: Math.round(rect.top), w: Math.round(rect.width), h: Math.round(rect.height) }
+                            attributes: el.name ? { name: el.name } : {}
                         });
                     });
-                    return results.slice(0, 100); // Increased limit for better context
+                    return JSON.stringify(results.slice(0, 100));
                 })()
             `);
 
-            // 1c. Extract full page text for context (Root Cause 2 fix)
             const pageText = await wv.executeJavaScript(`document.body.innerText.substring(0, 3000)`);
-
-            // 2. Query the new Backend Execute Endpoint (Step 2)
-            const backendUrl = settings.backendUrl || BACKEND_URL;
             const currentUrl = wv.getURL();
             
             appendAssistantMessage(`Step ${step + 1}: AI is thinking...`);
             handleStatus('thinking');
 
-            const resp = await fetch(backendUrl + '/api/automation/execute', {
+            const resp = await fetch(backendUrl + '/api/automation/step', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ 
-                    command: instruction, 
+                    sessionId: sessionId,
                     screenshot: base64Img, 
                     dom: domElements,
                     pageText: pageText,
-                    url: currentUrl,
-                    history: stepHistory
+                    url: currentUrl
                 })
             });
 
@@ -830,22 +825,24 @@ async function runAutomationTask(instruction) {
                 break;
             }
 
-            const actions = await resp.json();
+            const result = await resp.json();
             
-            // If AI says "done", stop the loop
-            if (actions.length === 0 || actions[0]?.action === 'done') {
+            if (result.status === 'DONE') {
                 appendAssistantMessage('✅ Task complete!');
                 break;
             }
 
-            // 3. Act (Step 3)
+            if (result.status === 'NEEDS_CONFIRMATION') {
+                appendAssistantMessage('⚠️ ' + result.message);
+                automationRunning = false;
+                break;
+            }
+
+            // 3. Act
             handleStatus('acting');
-            const success = await executeActions(wv, actions, instruction);
-            if (success === false) break; // Loop stopped by safety logic
+            const success = await executeActions(wv, result.actions || [], instruction);
+            if (!success) break;
             
-            stepHistory.push(`Step ${step + 1}: Executed ${actions.length} actions: ${actions.map(a => a.reason).join(', ')}`);
-            
-            // Wait for page to settle
             await new Promise(r => setTimeout(r, 1500));
         }
 
@@ -885,7 +882,11 @@ async function sendMessage() {
     const backendUrl = settings.backendUrl || BACKEND_URL;
 
     if (isAutomation) {
-        const instruction = text.replace(/^\/do\s+/i, '');
+        let instruction = text
+            .replace(/^\/do\s+/i, '')
+            .replace(/^automate\s+/i, '')
+            .replace(/^do task:\s*/i, '');
+        
         if (automationRunning) {
             appendAssistantMessage('I am already working on a task! Please click Stop first.');
             removeThinkingIndicator();

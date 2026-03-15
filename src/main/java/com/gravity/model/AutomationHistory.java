@@ -12,11 +12,23 @@ public class AutomationHistory {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
+    @Column(name = "session_id")
+    private String sessionId;
+
+    @Column(name = "step_number")
+    private int stepNumber;
+
     @Column(columnDefinition = "TEXT")
     private String command;
 
     @Column(length = 2000)
     private String url;
+
+    @Column(name = "visual_summary", columnDefinition = "TEXT")
+    private String visualSummary;
+
+    @Column(name = "page_text", columnDefinition = "TEXT")
+    private String pageText;
 
     @Column(name = "actions_json", columnDefinition = "TEXT")
     private String actionsJson;

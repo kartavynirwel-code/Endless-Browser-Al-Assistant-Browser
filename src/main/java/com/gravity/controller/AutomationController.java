@@ -2,7 +2,10 @@ package com.gravity.controller;
 
 import com.gravity.model.AutomationHistory;
 import com.gravity.model.AutomationHistoryRepository;
-import com.gravity.service.AIService;
+import com.gravity.model.AutomationSession;
+import com.gravity.model.AutomationSessionRepository;
+import com.gravity.service.AutomationOrchestrator;
+import com.gravity.service.SessionService;
 import lombok.Data;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
@@ -15,43 +18,42 @@ import java.util.Map;
 @RequiredArgsConstructor
 public class AutomationController {
 
-    private final AIService aiService;
-    private final AutomationHistoryRepository historyRepository;
+    private final AutomationOrchestrator orchestrator;
+    private final SessionService sessionService;
+    private final AutomationSessionRepository sessionRepository;
 
-    @PostMapping("/execute")
-    public List<Map<String, Object>> execute(@RequestBody AutomationRequest request) {
-        // Step 2: Think (Backend logic)
-        List<Map<String, Object>> actions = aiService.generateAutomationActions(
-                request.getCommand(),
+    @PostMapping("/start")
+    public AutomationSession start(@RequestBody StartRequest request) {
+        return sessionService.startSession(request.getCommand());
+    }
+
+    @PostMapping("/step")
+    public AutomationOrchestrator.StepResult step(@RequestBody StepRequest request) {
+        return orchestrator.executeStep(
+                request.getSessionId(),
                 request.getScreenshot(),
                 request.getDom(),
-                request.getHistory(),
-                request.getPageText()
+                request.getPageText(),
+                request.getUrl()
         );
+    }
 
-        // Step 4: Store initial history
-        try {
-            AutomationHistory history = new AutomationHistory();
-            history.setCommand(request.getCommand());
-            history.setUrl(request.getUrl());
-            history.setActionsJson(actions.toString());
-            history.setStatus(AutomationHistory.Status.PARTIAL);
-            historyRepository.save(history);
-        } catch (Exception e) {
-            // Log database error but don't fail the automation
-            System.err.println("Database error: " + e.getMessage());
-        }
-
-        return actions;
+    @PostMapping("/stop/{sessionId}")
+    public void stop(@PathVariable String sessionId) {
+        sessionService.completeSession(sessionId, AutomationSession.Status.STOPPED);
     }
 
     @Data
-    public static class AutomationRequest {
+    public static class StartRequest {
         private String command;
+    }
+
+    @Data
+    public static class StepRequest {
+        private String sessionId;
         private String screenshot;
-        private List<Map<String, Object>> dom;
-        private String url;
+        private String dom;
         private String pageText;
-        private List<String> history;
+        private String url;
     }
 }
