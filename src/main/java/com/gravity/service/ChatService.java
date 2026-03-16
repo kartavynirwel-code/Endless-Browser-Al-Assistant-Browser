@@ -144,8 +144,9 @@ public class ChatService {
 
     private void savePersistentMessage(String sessionId, String role, String content) {
         try {
-            Object principal = SecurityContextHolder.getContext().getAuthentication().getPrincipal();
-            if (principal instanceof UserDetails) {
+            var auth = SecurityContextHolder.getContext().getAuthentication();
+            if (auth != null && auth.isAuthenticated() && auth.getPrincipal() instanceof UserDetails) {
+                Object principal = auth.getPrincipal();
                 String username = ((UserDetails) principal).getUsername();
                 User user = userRepository.findByUsername(username).orElse(null);
                 if (user != null) {

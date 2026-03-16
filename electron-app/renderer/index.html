@@ -90,6 +90,9 @@
                             <span class="status-text" id="statusText">Ready</span>
                         </div>
                     </div>
+                <div class="sidebar-user-info">
+                    <span id="headerUsername"></span>
+                    <button id="userActionBtn" title="Login"><i class="fa-solid fa-user-circle"></i></button>
                 </div>
                 <button class="sidebar-close-btn" id="closeSidebarBtn" title="Close"><i
                         class="fa-solid fa-xmark"></i></button>
@@ -97,7 +100,7 @@
 
             <div class="sidebar-tabs">
                 <button class="sidebar-tab active" data-panel="chatPanel" title="Chat"><i class="fa-solid fa-comments"></i><span>Chat</span></button>
-                <button class="sidebar-tab" data-panel="historyPanel" title="History"><i class="fa-solid fa-history"></i><span>History</span></button>
+                <button class="sidebar-tab" data-panel="chatHistoryPanel" title="History"><i class="fa-solid fa-history"></i><span>History</span></button>
                 <button class="sidebar-tab" data-panel="logsPanel" title="Logs"><i class="fa-solid fa-terminal"></i><span>Logs</span></button>
             </div>
 
@@ -130,7 +133,7 @@
             </div>
 
             <!-- History Panel -->
-            <div id="historyPanel" class="sidebar-panel">
+            <div id="chatHistoryPanel" class="sidebar-panel">
                 <div class="panel-header">
                     <h2>Chat History</h2>
                     <button id="refreshHistory"><i class="fa-solid fa-rotate-right"></i></button>

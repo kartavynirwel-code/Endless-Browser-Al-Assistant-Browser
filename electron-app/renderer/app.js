@@ -18,7 +18,7 @@ const storage = {
 // ── Data ──
 let bookmarks = storage.get('gravity_bookmarks', []);
 let history = storage.get('gravity_history', []);
-let settings = storage.get('gravity_settings', { homePage: HOME_URL, searchEngine: 'google', backendUrl: BACKEND_URL, autoOpen: false, accentColor: '#7c6aff' });
+let settings = storage.get('gravity_settings', { homePage: 'https://www.google.com', searchEngine: 'google', backendUrl: 'http://localhost:8082', autoOpen: false, accentColor: '#7c6aff' });
 let profile = storage.get('gravity_profile', { name: 'User', email: '' });
 
 // ── DOM ──
@@ -39,7 +39,8 @@ const dom = {
     logsContainer: $('logsContainer'),
     // Panels
     bookmarksPanel: $('bookmarksPanel'), bookmarksList: $('bookmarksList'),
-    historyPanel: $('historyPanel'), historyList: $('historyList'), clearHistoryBtn: $('clearHistoryBtn'),
+    browsingHistoryPanel: $('browsingHistoryPanel'), historyList: $('historyList'), clearHistoryBtn: $('clearHistoryBtn'),
+    chatHistoryPanel: $('chatHistoryPanel'),
     settingsPanel: $('settingsPanel'), profilePanel: $('profilePanel'), aboutPanel: $('aboutPanel'),
     // Menu items
     menuBookmarks: $('menuBookmarks'), menuHistory: $('menuHistory'), menuDownloads: $('menuDownloads'),
@@ -107,7 +108,7 @@ if (window.electronAPI) {
 // ==============================================
 
 function createTab(url) {
-    url = url || settings.homePage || HOME_URL;
+    url = url || settings.homePage || HOME_URL || 'https://www.google.com';
     tabIdCounter++;
     const tabId = tabIdCounter;
 
@@ -265,7 +266,7 @@ dom.addressBar.addEventListener('keydown', (e) => {
 });
 
 dom.addressBar.addEventListener('focus', () => dom.addressBar.select());
-dom.newTabBtn.addEventListener('click', () => createTab());
+dom.newTabBtn.addEventListener('click', () => createTab('https://www.google.com'));
 
 // ==============================================
 // BOOKMARKS
@@ -489,7 +490,7 @@ document.querySelectorAll('.sidebar-tab').forEach(tab => {
         document.querySelectorAll('.sidebar-panel').forEach(p => p.classList.remove('active'));
         const targetPanel = document.getElementById(panelId);
         if (targetPanel) targetPanel.classList.add('active');
-        if (panelId === 'historyPanel') fetchHistory();
+        if (panelId === 'chatHistoryPanel') fetchHistory();
     });
 });
 
@@ -1216,7 +1217,11 @@ function timeAgo(ts) {
 // ==============================================
 
 applySettings();
-createTab(settings.homePage || HOME_URL);
+// Ensure correct backend URL is applied if localStorage was stale
+if (settings.backendUrl === 'http://localhost:8080') {
+    settings.backendUrl = 'http://localhost:8082';
+}
+createTab('https://www.google.com');
 connectWebSocket();
 if (settings.autoOpen) toggleSidebar();
 if (dom.statBookmarks) dom.statBookmarks.textContent = bookmarks.length;
