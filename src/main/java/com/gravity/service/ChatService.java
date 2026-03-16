@@ -47,11 +47,14 @@ public class ChatService {
     }
 
     public Flux<String> streamChat(String sessionId, String message, String base64Image) {
+        log.info("[STREAM CHAT] Received request for session: {}. Message length: {}", sessionId, message != null ? message.length() : 0);
         try {
             boolean hasImage = base64Image != null && !base64Image.isEmpty();
             OllamaOptions options = OllamaOptions.create()
-                    .withModel(hasImage ? "moondream:latest" : "phi3:mini")
+                    .withModel("moondream:latest")
                     .withTemperature(0.7f);
+
+            log.info("[STREAM CHAT] Using model: moondream:latest (Image: {})", hasImage);
 
             List<Message> messages = new ArrayList<>(chatMemory.get(sessionId, 10)); // Get last 10 messages
             
@@ -105,7 +108,7 @@ public class ChatService {
         try {
             boolean hasImage = base64Image != null && !base64Image.isEmpty();
             OllamaOptions options = OllamaOptions.create()
-                    .withModel(hasImage ? "moondream:latest" : "phi3:mini")
+                    .withModel("moondream:latest")
                     .withTemperature(0.7f);
 
             List<Message> messages = new ArrayList<>(chatMemory.get(sessionId, 10)); // Get last 10 messages

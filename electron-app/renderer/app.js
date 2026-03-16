@@ -1003,8 +1003,13 @@ async function sendMessage() {
                 const lines = chunk.split('\n');
                 for (const line of lines) {
                     if (line.startsWith('data:')) {
-                        const content = line.slice(5);
+                        const content = line.slice(5).trim();
                         accumulatedResponse += content;
+                        textEl.textContent = accumulatedResponse;
+                        scrollChat();
+                    } else if (line.trim() && !line.startsWith(':')) {
+                        // Fallback: if not SSE, treat as raw data
+                        accumulatedResponse += line.trim();
                         textEl.textContent = accumulatedResponse;
                         scrollChat();
                     }
