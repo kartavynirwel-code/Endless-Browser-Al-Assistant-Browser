@@ -11,6 +11,7 @@ import org.springframework.ai.chat.memory.ChatMemory;
 import org.springframework.ai.chat.messages.AssistantMessage;
 import org.springframework.ai.chat.messages.Message;
 import org.springframework.ai.chat.messages.Media;
+import org.springframework.ai.chat.messages.SystemMessage;
 import org.springframework.ai.chat.messages.UserMessage;
 import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.ai.chat.model.ChatResponse;
@@ -56,7 +57,9 @@ public class ChatService {
 
             log.info("[STREAM CHAT] Using model: moondream:latest (Image: {})", hasImage);
 
-            List<Message> messages = new ArrayList<>(chatMemory.get(sessionId, 10)); // Get last 10 messages
+            List<Message> messages = new ArrayList<>();
+            messages.add(new SystemMessage("You are Endless Assistant, a helpful and concise AI built into the Gravity browser. Answer questions accurately."));
+            messages.addAll(chatMemory.get(sessionId, 5)); // Keep last 5 for context
             
             Message userMessage;
             if (hasImage) {
