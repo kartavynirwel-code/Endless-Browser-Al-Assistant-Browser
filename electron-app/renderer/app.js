@@ -731,6 +731,11 @@ async function executeActions(wv, actions, originalCommand) {
                     await wv.executeJavaScript(`window.scrollBy(0, ${value || 400})`);
                     break;
                     
+                case 'navigate':
+                    await wv.loadURL(value.startsWith('http') ? value : 'https://' + value);
+                    await new Promise(r => setTimeout(r, 2000));
+                    break;
+                    
                 case 'keypress':
                     await wv.executeJavaScript(`
                         (() => {
@@ -786,7 +791,9 @@ async function runAutomationTask(instruction) {
                 (() => {
                     const results = [];
                     document.querySelectorAll(
-                        'input:not([type="hidden"]), button, select, textarea, [role="button"], a, p, span, label, h1, h2, h3'
+                        'input:not([type="hidden"]), button, select, textarea, ' +
+                        '[role="button"], [role="combobox"], [role="searchbox"], ' + 
+                        '[role="textbox"], a, p, span, label, h1, h2, h3'
                     ).forEach((el, i) => {
                         const rect = el.getBoundingClientRect();
                         if (rect.width === 0 || rect.height === 0) return;

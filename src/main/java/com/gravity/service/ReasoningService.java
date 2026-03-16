@@ -37,6 +37,8 @@ public class ReasoningService {
                          For radio/checkbox: "value" = the option text to select.
             - "select" → choose from a dropdown. "value" = option text.
             - "scroll" → scroll page. "value" = pixels (e.g. 400).
+            - "navigate" → go to a URL. "value" = full URL like "https://youtube.com"
+              Use this when user says "go to", "open", "search on" a website.
             - "done"   → task is complete, stop.
             
             CRITICAL RULES:
