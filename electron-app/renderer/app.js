@@ -60,6 +60,11 @@ let tabIdCounter = 0;
 let activeTabId = null;
 let automationRunning = false;
 const tabs = new Map();
+let chatSessionId = storage.get('gravity_chat_session', 'chat-' + Math.random().toString(36).substring(2, 11));
+storage.set('gravity_chat_session', chatSessionId);
+let chatAbortController = null;
+let jwtToken = localStorage.getItem('gravity_jwt_token');
+let currentUser = localStorage.getItem('gravity_username');
 
 // Generate UI overlay for automation dynamically
 const overlay = document.createElement('div');
@@ -473,15 +478,39 @@ function toggleSidebar() {
 
 dom.assistantToggle.addEventListener('click', toggleSidebar);
 dom.closeSidebarBtn.addEventListener('click', toggleSidebar);
+updateAuthUI();
 
-dom.sidebarTabs.forEach(tab => {
+// Event Listeners for tabs & auth
+document.querySelectorAll('.sidebar-tab').forEach(tab => {
     tab.addEventListener('click', () => {
-        dom.sidebarTabs.forEach(t => t.classList.remove('active'));
-        dom.sidebarPanels.forEach(p => p.classList.remove('active'));
+        const panelId = tab.dataset.panel;
+        document.querySelectorAll('.sidebar-tab').forEach(t => t.classList.remove('active'));
         tab.classList.add('active');
-        $(tab.dataset.panel).classList.add('active');
+        document.querySelectorAll('.sidebar-panel').forEach(p => p.classList.remove('active'));
+        const targetPanel = document.getElementById(panelId);
+        if (targetPanel) targetPanel.classList.add('active');
+        if (panelId === 'historyPanel') fetchHistory();
     });
 });
+
+document.getElementById('userActionBtn').addEventListener('click', () => {
+    if (jwtToken) logout();
+    else document.getElementById('loginOverlay').classList.remove('hidden');
+});
+
+document.getElementById('toSignup').addEventListener('click', () => {
+    document.getElementById('loginOverlay').classList.add('hidden');
+    document.getElementById('signupOverlay').classList.remove('hidden');
+});
+
+document.getElementById('toLogin').addEventListener('click', () => {
+    document.getElementById('signupOverlay').classList.add('hidden');
+    document.getElementById('loginOverlay').classList.remove('hidden');
+});
+
+document.getElementById('loginSubmit').addEventListener('click', loginUser);
+document.getElementById('signupSubmit').addEventListener('click', signupUser);
+document.getElementById('refreshHistory').addEventListener('click', fetchHistory);
 
 // ==============================================
 // KEYBOARD SHORTCUTS
@@ -607,14 +636,18 @@ async function appendAssistantMessage(text) {
     div.innerHTML = `<div class="msg-avatar"><i class="fa-solid fa-sparkles"></i></div><div class="msg-content"><div class="msg-text"></div></div>`;
     dom.chatMessages.appendChild(div);
     const textEl = div.querySelector('.msg-text');
-    
-    // Typing effect (word-by-word)
-    const words = text.split(' ');
-    for (let i = 0; i < words.length; i++) {
-        textEl.textContent += words[i] + (i === words.length - 1 ? '' : ' ');
-        scrollChat();
-        await new Promise(r => setTimeout(r, 25)); // Slightly faster: 25ms per word
-    }
+    textEl.textContent = text;
+    scrollChat();
+}
+
+function createAssistantMessageBubble() {
+    removeThinkingIndicator();
+    const div = document.createElement('div');
+    div.className = 'chat-msg assistant-msg';
+    div.innerHTML = `<div class="msg-avatar"><i class="fa-solid fa-sparkles"></i></div><div class="msg-content"><div class="msg-text"></div></div>`;
+    dom.chatMessages.appendChild(div);
+    scrollChat();
+    return div.querySelector('.msg-text');
 }
 
 function appendAssistantImage(base64Image) {
@@ -782,9 +815,11 @@ async function runAutomationTask(instruction) {
         for (let step = 0; step < 10 && automationRunning; step++) {
             appendLog(`Step ${step + 1}: Capturing screen and DOM...`);
             
-            const image = await wv.capturePage();
-            const base64Img = image.toDataURL('image/jpeg', 0.6);
-            appendAssistantImage(base64Img);
+            const base64Img = step === 0 
+                ? (await wv.capturePage()).toDataURL('image/jpeg', 0.4) 
+                : null;
+            
+            if (step === 0 && base64Img) appendAssistantImage(base64Img);
 
             // Extract DOM
             const domElements = await wv.executeJavaScript(`
@@ -793,7 +828,7 @@ async function runAutomationTask(instruction) {
                     document.querySelectorAll(
                         'input:not([type="hidden"]), button, select, textarea, ' +
                         '[role="button"], [role="combobox"], [role="searchbox"], ' + 
-                        '[role="textbox"], a, p, span, label, h1, h2, h3'
+                        '[role="textbox"], a, label'
                     ).forEach((el, i) => {
                         const rect = el.getBoundingClientRect();
                         if (rect.width === 0 || rect.height === 0) return;
@@ -833,7 +868,7 @@ async function runAutomationTask(instruction) {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ 
                     sessionId: sessionId,
-                    screenshot: base64Img, 
+                    screenshot: step === 0 ? base64Img : null, 
                     dom: domElements,
                     pageText: pageText,
                     url: currentUrl
@@ -867,7 +902,7 @@ async function runAutomationTask(instruction) {
             const success = await executeActions(wv, result.actions || [], instruction);
             if (!success) break;
             
-            await new Promise(r => setTimeout(r, 1500));
+            await new Promise(r => setTimeout(r, 800));
         }
 
     } catch (e) {
@@ -925,32 +960,232 @@ async function sendMessage() {
         // Kick off asynchronous native loop
         runAutomationTask(instruction);
     } else {
-        // Chat-only Q&A
+        // Chat-only Q&A with Streaming
         try {
-            const reqBody = { message: text || "Analyze this image" };
+            if (chatAbortController) chatAbortController.abort();
+            chatAbortController = new AbortController();
+            
+            handleStatus('thinking');
+
+            const reqBody = { 
+                message: text || "Analyze this image",
+                sessionId: chatSessionId
+            };
             if (sentImage) {
                 reqBody.image = sentImage;
             }
-            const resp = await fetch(backendUrl + '/api/gravity/chat', {
-                method: 'POST', headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(reqBody)
+            
+            const resp = await fetch(backendUrl + '/api/gravity/chat/stream', {
+                method: 'POST', 
+                headers: { 
+                    'Content-Type': 'application/json',
+                    'Authorization': jwtToken ? `Bearer ${jwtToken}` : ''
+                },
+                body: JSON.stringify(reqBody),
+                signal: chatAbortController.signal
             });
-            const data = await resp.json();
+
+            if (!resp.ok) throw new Error('Network response was not ok');
+
             removeThinkingIndicator();
-            appendAssistantMessage(data.reply || 'No response received.');
+            const textEl = createAssistantMessageBubble();
+            
+            const reader = resp.body.getReader();
+            const decoder = new TextDecoder();
+            let accumulatedResponse = '';
+
+            while (true) {
+                const { done, value } = await reader.read();
+                if (done) break;
+                
+                const chunk = decoder.decode(value, { stream: true });
+                const lines = chunk.split('\n');
+                for (const line of lines) {
+                    if (line.startsWith('data:')) {
+                        const content = line.slice(5);
+                        accumulatedResponse += content;
+                        textEl.textContent = accumulatedResponse;
+                        scrollChat();
+                    }
+                }
+            }
         } catch (err) {
             removeThinkingIndicator();
-            appendAssistantMessage('Could not connect to backend. Is the server running on ' + backendUrl + '?');
+            if (err.name === 'AbortError') {
+                appendAssistantMessage('Generation stopped.');
+            } else {
+                appendAssistantMessage('Error: ' + err.message);
+            }
+        } finally {
+            chatAbortController = null;
+            handleStatus('idle');
         }
     }
 }
 
 async function stopTask() {
+    if (chatAbortController) {
+        chatAbortController.abort();
+        chatAbortController = null;
+    }
     automationRunning = false;
     const overlay = document.getElementById('automationOverlay');
     if (overlay) overlay.classList.add('hidden');
     appendAssistantMessage('Stopping the current task...');
     handleStatus('idle');
+}
+
+// Authentication Functions
+function updateAuthUI() {
+    const userBtn = document.getElementById('userActionBtn');
+    const headerUsername = document.getElementById('headerUsername');
+    if (jwtToken) {
+        userBtn.innerHTML = '<i class="fa-solid fa-right-from-bracket"></i>';
+        userBtn.title = "Logout";
+        headerUsername.textContent = currentUser;
+    } else {
+        userBtn.innerHTML = '<i class="fa-solid fa-user-circle"></i>';
+        userBtn.title = "Login";
+        headerUsername.textContent = "";
+    }
+}
+
+async function loginUser() {
+    const user = document.getElementById('loginUsername').value;
+    const pass = document.getElementById('loginPassword').value;
+    const url = settings.backendUrl || BACKEND_URL;
+    
+    try {
+        const resp = await fetch(url + '/api/auth/login', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ username: user, password: pass })
+        });
+        const data = await resp.json();
+        if (resp.ok) {
+            jwtToken = data.token;
+            currentUser = data.username;
+            localStorage.setItem('gravity_jwt_token', jwtToken);
+            localStorage.setItem('gravity_username', currentUser);
+            document.getElementById('loginOverlay').classList.add('hidden');
+            updateAuthUI();
+            appendAssistantMessage(`Welcome back, ${currentUser}! History synced.`);
+            fetchHistory();
+        } else {
+            alert(data.message || 'Login failed');
+        }
+    } catch (err) {
+        alert('Error: ' + err.message);
+    }
+}
+
+async function signupUser() {
+    const user = document.getElementById('signupUsername').value;
+    const email = document.getElementById('signupEmail').value;
+    const pass = document.getElementById('signupPassword').value;
+    const url = settings.backendUrl || BACKEND_URL;
+    
+    try {
+        const resp = await fetch(url + '/api/auth/signup', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ username: user, email: email, password: pass })
+        });
+        const data = await resp.json();
+        if (resp.ok) {
+            alert('Account created! Please login.');
+            document.getElementById('signupOverlay').classList.add('hidden');
+            document.getElementById('loginOverlay').classList.remove('hidden');
+        } else {
+            alert(data.message || 'Signup failed');
+        }
+    } catch (err) {
+        alert('Error: ' + err.message);
+    }
+}
+
+function logout() {
+    jwtToken = null;
+    currentUser = null;
+    localStorage.removeItem('gravity_jwt_token');
+    localStorage.removeItem('gravity_username');
+    updateAuthUI();
+    appendAssistantMessage('Logged out successfully.');
+    document.getElementById('chatHistoryList').innerHTML = '<div class="empty-state"><p>Login to see history.</p></div>';
+}
+
+// History Functions
+async function fetchHistory() {
+    if (!jwtToken) return;
+    
+    const list = document.getElementById('chatHistoryList');
+    list.innerHTML = '<div class="loading"><i class="fa-solid fa-spinner fa-spin"></i> Loading...</div>';
+    const url = settings.backendUrl || BACKEND_URL;
+    
+    try {
+        const resp = await fetch(url + '/api/gravity/history', {
+            headers: { 'Authorization': `Bearer ${jwtToken}` }
+        });
+        if (resp.ok) {
+            const data = await resp.json();
+            renderHistory(data);
+        } else {
+            list.innerHTML = '<div class="error">Failed to load history.</div>';
+        }
+    } catch (err) {
+        list.innerHTML = '<div class="error">Error connecting to server.</div>';
+    }
+}
+
+function renderHistory(messages) {
+    const list = document.getElementById('chatHistoryList');
+    if (!messages || messages.length === 0) {
+        list.innerHTML = '<div class="empty-state"><p>No history yet.</p></div>';
+        return;
+    }
+    
+    list.innerHTML = '';
+    
+    // Group messages by session id (or just show all for now)
+    // For a better UX, we would group by sessionId
+    const sessions = {};
+    messages.forEach(msg => {
+        if (!sessions[msg.sessionId]) {
+            sessions[msg.sessionId] = {
+                title: msg.content.substring(0, 30) + '...',
+                date: new Date(msg.timestamp).toLocaleString(),
+                lastMsg: msg.timestamp
+            };
+        }
+        // Update title if it's the first user message
+        if (msg.role === 'user' && sessions[msg.sessionId].title.length > 50) {
+             sessions[msg.sessionId].title = msg.content.substring(0, 30) + '...';
+        }
+    });
+
+    Object.keys(sessions).forEach(sid => {
+        const sess = sessions[sid];
+        const item = document.createElement('div');
+        item.className = 'history-item';
+        item.innerHTML = `
+            <div class="history-item-date">${sess.date}</div>
+            <div class="history-item-preview">${sess.title}</div>
+        `;
+        item.addEventListener('click', () => {
+            // Restore session
+            chatSessionId = sid;
+            storage.set('gravity_chat_session', chatSessionId);
+            // Clear current chat display and ideally reload session messages
+            document.getElementById('chatMessages').innerHTML = '';
+            messages.filter(m => m.sessionId === sid).forEach(m => {
+                if (m.role === 'user') appendUserMessage(m.content);
+                else appendAssistantMessage(m.content);
+            });
+            // Switch to chat panel
+            document.querySelector('[data-panel="chatPanel"]').click();
+        });
+        list.appendChild(item);
+    });
 }
 
 dom.chatInput.addEventListener('input', function () { this.style.height = 'auto'; this.style.height = Math.min(this.scrollHeight, 120) + 'px'; });

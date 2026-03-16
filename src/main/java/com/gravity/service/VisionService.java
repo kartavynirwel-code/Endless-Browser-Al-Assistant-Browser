@@ -21,7 +21,7 @@ import java.util.List;
 public class VisionService {
 
     private final OllamaChatModel chatModel;
-    private static final String VISION_MODEL = "moondream";
+    private static final String VISION_MODEL = "moondream:latest";
 
     public String analyzeScreenshot(String base64Image) {
         if (base64Image == null || base64Image.isEmpty()) {

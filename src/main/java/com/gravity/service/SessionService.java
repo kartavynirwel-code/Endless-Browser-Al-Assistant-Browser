@@ -26,21 +26,19 @@ public class SessionService {
     }
 
     @Transactional
-    public void saveStep(String sessionId, int stepNumber, String url, String screenshot, 
-                         String pageText, String visualSummary, List<Map<String, Object>> actions) {
+    public void saveStep(String sessionId, int stepNumber, String url, 
+                         String screenshot, String pageText, 
+                         String visualSummary, List<Map<String, Object>> actions) {
         AutomationHistory history = new AutomationHistory();
         history.setSessionId(sessionId);
         history.setStepNumber(stepNumber);
         history.setUrl(url);
         history.setVisualSummary(visualSummary);
         history.setPageText(pageText);
+        // Screenshot DB mein mat save karo - bahut bada hota hai!
         history.setActionsJson(actions.toString());
         history.setStatus(AutomationHistory.Status.PARTIAL);
         historyRepository.save(history);
-
-        AutomationSession session = sessionRepository.findById(sessionId).orElseThrow();
-        session.setUpdatedAt(LocalDateTime.now());
-        sessionRepository.save(session);
     }
 
     public List<String> getHistory(String sessionId) {

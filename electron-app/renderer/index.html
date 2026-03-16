@@ -96,12 +96,12 @@
             </header>
 
             <div class="sidebar-tabs">
-                <button class="sidebar-tab active" data-panel="chat-panel"><i class="fa-regular fa-comment-dots"></i>
-                    Chat</button>
-                <button class="sidebar-tab" data-panel="logs-panel"><i class="fa-solid fa-terminal"></i> Logs</button>
+                <button class="sidebar-tab active" data-panel="chatPanel" title="Chat"><i class="fa-solid fa-comments"></i><span>Chat</span></button>
+                <button class="sidebar-tab" data-panel="historyPanel" title="History"><i class="fa-solid fa-history"></i><span>History</span></button>
+                <button class="sidebar-tab" data-panel="logsPanel" title="Logs"><i class="fa-solid fa-terminal"></i><span>Logs</span></button>
             </div>
 
-            <div class="sidebar-panel active" id="chat-panel">
+            <div class="sidebar-panel active" id="chatPanel">
                 <div class="chat-messages" id="chatMessages">
                     <div class="chat-msg assistant-msg">
                         <div class="msg-avatar"><i class="fa-solid fa-sparkles"></i></div>
@@ -129,7 +129,21 @@
                 </div>
             </div>
 
-            <div class="sidebar-panel" id="logs-panel">
+            <!-- History Panel -->
+            <div id="historyPanel" class="sidebar-panel">
+                <div class="panel-header">
+                    <h2>Chat History</h2>
+                    <button id="refreshHistory"><i class="fa-solid fa-rotate-right"></i></button>
+                </div>
+                <div id="chatHistoryList" class="history-list">
+                    <div class="empty-state">
+                        <i class="fa-solid fa-history"></i>
+                        <p>No chat history available.</p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="sidebar-panel" id="logsPanel">
                 <div class="logs-container" id="logsContainer">
                     <div class="log-entry info">[System] Endless Assistant initialized</div>
                 </div>
@@ -288,6 +302,76 @@
             </div>
         </div>
     </div>
+
+    <!-- Login Overlay -->
+    <div id="loginOverlay" class="overlay-panel hidden">
+        <div class="overlay-content auth-panel">
+            <div class="overlay-header">
+                <h2>Welcome Back</h2>
+                <button class="overlay-close" data-close-panel="loginOverlay"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <div class="overlay-body">
+                <div class="auth-form">
+                    <div class="input-group">
+                        <label>Username</label>
+                        <input type="text" id="loginUsername" placeholder="your_username">
+                    </div>
+                    <div class="input-group">
+                        <label>Password</label>
+                        <input type="password" id="loginPassword" placeholder="••••••••">
+                    </div>
+                    <button id="loginSubmit" class="btn btn-primary">Sign In</button>
+                    <p class="auth-switch">Don't have an account? <span id="toSignup">Sign Up</span></p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Signup Overlay -->
+    <div id="signupOverlay" class="overlay-panel hidden">
+        <div class="overlay-content auth-panel">
+            <div class="overlay-header">
+                <h2>Create Account</h2>
+                <button class="overlay-close" data-close-panel="signupOverlay"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <div class="overlay-body">
+                <div class="auth-form">
+                    <div class="input-group">
+                        <label>Username</label>
+                        <input type="text" id="signupUsername" placeholder="cool_user">
+                    </div>
+                    <div class="input-group">
+                        <label>Email</label>
+                        <input type="email" id="signupEmail" placeholder="user@example.com">
+                    </div>
+                    <div class="input-group">
+                        <label>Password</label>
+                        <input type="password" id="signupPassword" placeholder="••••••••">
+                    </div>
+                    <button id="signupSubmit" class="btn btn-primary">Create Account</button>
+                    <p class="auth-switch">Already have an account? <span id="toLogin">Sign In</span></p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- User Profile Details in Sidebar Header -->
+    <style>
+        .sidebar-user-info { display: flex; align-items: center; gap: 10px; margin-left: auto; }
+        .auth-panel { max-width: 350px; }
+        .auth-form { display: flex; flex-direction: column; gap: 15px; margin-top: 10px; }
+        .auth-switch { font-size: 13px; text-align: center; color: var(--text-dim); margin-top: 10px; }
+        .auth-switch span { color: var(--accent); cursor: pointer; font-weight: 500; }
+        .history-list { flex: 1; overflow-y: auto; padding: 10px; display: flex; flex-direction: column; gap: 8px; }
+        .history-item { background: var(--bg-item); padding: 10px; border-radius: 8px; cursor: pointer; transition: all 0.2s; border: 1px solid transparent; }
+        .history-item:hover { background: var(--hover); border-color: var(--border-medium); }
+        .history-item-date { font-size: 11px; color: var(--text-dim); margin-bottom: 4px; }
+        .history-item-preview { font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        
+        .sidebar-header { position: relative; }
+        #userActionBtn { background: none; border: none; font-size: 18px; color: var(--text-dim); cursor: pointer; transition: color 0.2s; }
+        #userActionBtn:hover { color: var(--accent); }
+    </style>
 
     <script src="app.js"></script>
 </body>

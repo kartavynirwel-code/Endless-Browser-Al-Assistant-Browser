@@ -38,8 +38,14 @@ public class SafetyService {
 
     private boolean isDestructive(String type, String reason) {
         String r = (reason != null ? reason : "").toLowerCase();
-        return r.contains("submit") || r.contains("buy") || r.contains("pay") || r.contains("delete") 
-               || "submit".equals(type);
+        // Only block FORM submit, not search submit
+        boolean isFormSubmit = (r.contains("submit") && !r.contains("search"))
+                || r.contains("buy") 
+                || r.contains("pay") 
+                || r.contains("delete")
+                || r.contains("purchase")
+                || "submit".equals(type);
+        return isFormSubmit;
     }
 
     @Data
