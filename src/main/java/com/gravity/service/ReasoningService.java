@@ -23,34 +23,62 @@ public class ReasoningService {
     private final ObjectMapper objectMapper;
     private static final String TEXT_MODEL = "phi3:mini";
 
-    public List<Map<String, Object>> planActions(String command, String pageText, String dom, String visualSummary, List<String> history) {
+    public List<Map<String, Object>> planActions(String command, String pageText, 
+            String dom, String visualSummary, List<String> history) {
+
         String systemPrompt = """
-            You are an Expert Web Automation & Intelligence Agent. 
-            You must analyze the VISUAL layout, the full PAGE TEXT transcript, and the technical DOM elements to fulfill the USER COMMAND.
+            You are a browser automation agent for ANY website.
+            Your ONLY output must be a raw JSON array of actions. 
+            No explanation. No markdown. No text before or after.
             
-            GOAL: Efficiently and accurately complete the user's request on any website.
+            ACTION TYPES:
+            - "type"   → fill a text input. "value" = exact text to type. NEVER empty.
+            - "click"  → click a radio button, checkbox, button, or link.
+                         For radio/checkbox: "value" = the option text to select.
+            - "select" → choose from a dropdown. "value" = option text.
+            - "scroll" → scroll page. "value" = pixels (e.g. 400).
+            - "done"   → task is complete, stop.
             
-            OPERATIONAL RULES:
-            1. CLARITY: Use "PAGE TEXT" and "label/labelText" in "DOM ELEMENTS" to understand which input belongs to which question.
-            2. MAPPING: Match your intended action to the correct data-gravity-id.
-            3. GARBAGE FILTER: IGNORE numerical coordinates. Focus on context only.
-            4. ACTION TYPES: 'type', 'click', 'select', 'scroll'.
-            5. ACCURACY: Provide the exact answers for quizzes or professional values for forms.
-            6. OUTPUT: Respond ONLY with the JSON array. DO NOT repeat the prompt.
+            CRITICAL RULES:
+            1. "targetId" MUST be the exact "id" number from DOM ELEMENTS 
+               where isInteractive=true. NEVER guess or invent IDs.
+            2. For text inputs: "value" MUST contain the ACTUAL answer. 
+               NEVER leave value as "" or null.
+            3. For radio buttons: use "click" action on the correct option's id.
+            4. For MCQ: read PAGE TEXT carefully to identify correct answer,
+               then click the matching radio button targetId.
+            5. Match EACH question in PAGE TEXT to its input field in DOM ELEMENTS
+               by reading nearby text/labels.
+            6. Fill ALL fields. Do NOT skip any question.
+            7. Do NOT include submit/send button in actions unless user said "submit".
             
-            Action schema:
-            [{"action":"type|click|select|scroll","targetId":0,"value":"text","reason":"why"}]
+            OUTPUT FORMAT EXAMPLE:
+            [
+              {"action":"type","targetId":3,"value":"object oriented","reason":"Q1: Java language type"},
+              {"action":"type","targetId":6,"value":"Machine","reason":"Q2: JVM stands for"},
+              {"action":"click","targetId":12,"value":"CSS","reason":"Q3: styling language is CSS"},
+              {"action":"done","targetId":null,"value":"","reason":"All questions answered"}
+            ]
             """;
 
         StringBuilder userPrompt = new StringBuilder();
         userPrompt.append("USER COMMAND: ").append(command).append("\n\n");
-        userPrompt.append("VISUAL ANALYSIS:\n").append(visualSummary).append("\n\n");
-        userPrompt.append("PAGE TEXT:\n").append(pageText).append("\n\n");
-        if (history != null && !history.isEmpty()) {
-            userPrompt.append("HISTORY:\n");
-            history.forEach(h -> userPrompt.append("- ").append(h).append("\n"));
+        
+        if (visualSummary != null && !visualSummary.contains("skipped")) {
+            userPrompt.append("VISUAL CONTEXT:\n").append(visualSummary).append("\n\n");
         }
-        userPrompt.append("\nDOM ELEMENTS:\n").append(dom);
+        
+        userPrompt.append("PAGE TEXT (read this to understand questions):\n")
+                  .append(pageText != null ? pageText : "").append("\n\n");
+        
+        if (history != null && !history.isEmpty()) {
+            userPrompt.append("ALREADY DONE (do not repeat):\n");
+            history.forEach(h -> userPrompt.append("- ").append(h).append("\n"));
+            userPrompt.append("\n");
+        }
+        
+        userPrompt.append("DOM ELEMENTS (use 'id' as targetId, only isInteractive=true):\n")
+                  .append(dom);
 
         var options = OllamaOptions.create()
                 .withModel(TEXT_MODEL)
@@ -67,7 +95,8 @@ public class ReasoningService {
 
         try {
             String response = chatModel.call(prompt).getResult().getOutput().getContent();
-            return parseActionList(sanitize(response));
+            log.info("AI raw response: {}", response);
+            return parseActionList(response);
         } catch (Exception e) {
             log.error("Reasoning failed: ", e);
             return List.of(Map.of("action", "error", "reason", "AI failure: " + e.getMessage()));

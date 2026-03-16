@@ -664,11 +664,15 @@ function appendLog(text) {
 // NATIVE AUTOMATION
 // ==============================================
 
-async function executeActions(wv, actions) {
+async function executeActions(wv, actions, originalCommand) {
+    const userWantsSubmit = originalCommand && 
+        (originalCommand.toLowerCase().includes('submit') || 
+         originalCommand.toLowerCase().includes('send'));
+
     for (const action of actions) {
         if (!automationRunning) break;
         
-        await new Promise(resolve => setTimeout(resolve, 800 + Math.random() * 1200));
+        await new Promise(resolve => setTimeout(resolve, 600 + Math.random() * 800));
         const { action: type, targetId, value, reason } = action;
         
         appendLog(`Action: ${type} - ${reason}`, 'acting');
@@ -683,6 +687,10 @@ async function executeActions(wv, actions) {
                             if (!el) { console.warn('Element not found: ${targetId}'); return; }
                             el.dispatchEvent(new MouseEvent('mouseover', { bubbles: true }));
                             el.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
+                            if (el.type === 'radio' || el.type === 'checkbox') {
+                                el.checked = true;
+                                el.dispatchEvent(new Event('change', { bubbles: true }));
+                            }
                             el.click();
                         })()
                     `);
@@ -705,35 +713,40 @@ async function executeActions(wv, actions) {
                     await wv.executeJavaScript(`
                         (() => {
                             const el = document.querySelector('[data-gravity-id="${targetId}"]');
-                            if (el) {
-                                el.value = "${value}";
-                                el.dispatchEvent(new Event('change', { bubbles: true }));
-                            }
+                            if (!el) return;
+                            // Try matching by value or text
+                            const opts = Array.from(el.options);
+                            const match = opts.find(o => 
+                                o.text.toLowerCase().includes("${value}".toLowerCase()) ||
+                                o.value.toLowerCase().includes("${value}".toLowerCase())
+                            );
+                            if (match) el.value = match.value;
+                            else el.value = "${value}";
+                            el.dispatchEvent(new Event('change', { bubbles: true }));
                         })()
                     `);
                     break;
                     
                 case 'scroll':
-                    await wv.executeJavaScript(`
-                        window.scrollBy(0, ${value || 400})
-                    `);
+                    await wv.executeJavaScript(`window.scrollBy(0, ${value || 400})`);
                     break;
                     
                 case 'keypress':
                     await wv.executeJavaScript(`
-                        const el = document.querySelector('[data-gravity-id="${targetId}"]');
-                        if (el) el.dispatchEvent(new KeyboardEvent('keydown', { key: "${value}", bubbles: true }));
+                        (() => {
+                            const el = document.querySelector('[data-gravity-id="${targetId}"]');
+                            if (el) el.dispatchEvent(new KeyboardEvent('keydown', 
+                                { key: "${value}", bubbles: true }));
+                        })()
                     `);
                     break;
-                
+                    
                 case 'done':
                     return true;
             }
         } catch (err) {
             appendLog(`Action error: ${err.message}`, 'error');
         }
-
-        // Send live log to UI via WebSocket (mocked as log update since STOMP logic is handled in controller)
         appendLog(`Finished: ${reason}`, 'success');
     }
     return true;
@@ -833,7 +846,11 @@ async function runAutomationTask(instruction) {
             }
 
             if (result.status === 'NEEDS_CONFIRMATION') {
+                // First execute the safe fill actions
+                handleStatus('acting');
+                await executeActions(wv, result.actions || [], instruction);
                 appendAssistantMessage('⚠️ ' + result.message);
+                appendAssistantMessage('✅ Form filled! Click Submit manually now.');
                 automationRunning = false;
                 break;
             }
@@ -873,10 +890,14 @@ async function sendMessage() {
     if (!isSidebarOpen) toggleSidebar();
     showThinkingIndicator();
 
+    const automationKeywords = ['fill', 'submit', 'click', 'search', 'answer', 'solve', 'do ', 'automate', 'buy', 'pay', 'login', 'register', 'type', 'go to', 'navigate'];
+    const lowerText = (text || '').toLowerCase();
     const isAutomation = text && (
-        text.toLowerCase().startsWith('/do ') ||
-        text.toLowerCase().startsWith('automate ') ||
-        text.toLowerCase().startsWith('do task:')
+        text.startsWith('/') || // Any slash command
+        automationKeywords.some(k => lowerText.includes(k)) ||
+        lowerText.includes('task') ||
+        lowerText.includes('form') ||
+        lowerText.includes('quiz')
     );
 
     const backendUrl = settings.backendUrl || BACKEND_URL;
@@ -884,6 +905,7 @@ async function sendMessage() {
     if (isAutomation) {
         let instruction = text
             .replace(/^\/do\s+/i, '')
+            .replace(/^\/automate\s+/i, '')
             .replace(/^automate\s+/i, '')
             .replace(/^do task:\s*/i, '');
         
