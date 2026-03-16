@@ -52,7 +52,9 @@ public class SecurityConfig {
                 .authorizeHttpRequests(auth ->
                         auth.requestMatchers("/api/auth/**").permitAll()
                                 .requestMatchers("/api/gravity/status").permitAll()
-                                .requestMatchers("/ws/**").permitAll() // WebSocket needs to be open or handled separately
+                                .requestMatchers("/api/gravity/chat/**").permitAll()
+                                .requestMatchers("/api/automation/**").permitAll()
+                                .requestMatchers("/ws/**").permitAll()
                                 .anyRequest().authenticated()
                 );
 

@@ -400,7 +400,7 @@ document.addEventListener('click', () => {
 });
 
 dom.menuBookmarks.addEventListener('click', () => { closeMenu(); renderBookmarks(); openPanel('bookmarksPanel'); });
-dom.menuHistory.addEventListener('click', () => { closeMenu(); renderHistory(); openPanel('historyPanel'); });
+dom.menuHistory.addEventListener('click', () => { closeMenu(); renderHistory(); openPanel('browsingHistoryPanel'); });
 dom.menuNewTab.addEventListener('click', () => { closeMenu(); createTab(); });
 dom.menuProfile.addEventListener('click', () => { closeMenu(); updateProfileStats(); openPanel('profilePanel'); });
 dom.menuSettings.addEventListener('click', () => { closeMenu(); openPanel('settingsPanel'); });
@@ -1116,7 +1116,11 @@ function logout() {
 
 // History Functions
 async function fetchHistory() {
-    if (!jwtToken) return;
+    if (!jwtToken) {
+        document.getElementById('chatHistoryList').innerHTML = 
+            '<div class="empty-state"><p>Please login to see history.</p></div>';
+        return;
+    }
     
     const list = document.getElementById('chatHistoryList');
     list.innerHTML = '<div class="loading"><i class="fa-solid fa-spinner fa-spin"></i> Loading...</div>';
