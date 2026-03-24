@@ -15,11 +15,19 @@ const storage = {
     set(key, val) { localStorage.setItem(key, JSON.stringify(val)); }
 };
 
+// ── CMD Palette ──
+const cmdPaletteOverlay = $('cmdPaletteOverlay');
+const cmdInput = $('cmdInput');
+const cmdResults = $('cmdResults');
+let cmdPaletteOpen = false;
+let cmdSelectedIndex = 0;
+let currentCmdItems = [];
+
 // ── Data ──
-let bookmarks = storage.get('gravity_bookmarks', []);
-let history = storage.get('gravity_history', []);
-let settings = storage.get('gravity_settings', { homePage: 'https://www.google.com', searchEngine: 'google', backendUrl: 'http://localhost:8082', autoOpen: false, accentColor: '#7c6aff' });
-let profile = storage.get('gravity_profile', { name: 'User', email: '' });
+let bookmarks = storage.get('endless_bookmarks', []);
+let history = storage.get('endless_history', []);
+let settings = storage.get('endless_settings', { homePage: 'https://www.google.com', searchEngine: 'google', backendUrl: 'http://localhost:8082', autoOpen: false, accentColor: '#7c6aff' });
+let profile = storage.get('endless_profile', { name: 'User', email: '' });
 
 // ── DOM ──
 const dom = {
@@ -47,7 +55,7 @@ const dom = {
     menuNewTab: $('menuNewTab'), menuProfile: $('menuProfile'), menuSettings: $('menuSettings'), menuAbout: $('menuAbout'),
     // Settings
     settingHomePage: $('settingHomePage'), settingSearchEngine: $('settingSearchEngine'),
-    settingBackendUrl: $('settingBackendUrl'), settingAutoOpen: $('settingAutoOpen'),
+    settingBackendUrl: $('settingBackendUrl'), settingAutoOpen: $('settingAutoOpen'), settingGeminiKey: $('settingGeminiKey'),
     saveSettingsBtn: $('saveSettingsBtn'), accentColorOptions: $('accentColorOptions'),
     // Profile
     profileName: $('profileName'), profileEmail: $('profileEmail'), saveProfileBtn: $('saveProfileBtn'),
@@ -61,11 +69,11 @@ let tabIdCounter = 0;
 let activeTabId = null;
 let automationRunning = false;
 const tabs = new Map();
-let chatSessionId = storage.get('gravity_chat_session', 'chat-' + Math.random().toString(36).substring(2, 11));
-storage.set('gravity_chat_session', chatSessionId);
+let chatSessionId = storage.get('endless_chat_session', 'chat-' + Math.random().toString(36).substring(2, 11));
+storage.set('endless_chat_session', chatSessionId);
 let chatAbortController = null;
-let jwtToken = localStorage.getItem('gravity_jwt_token');
-let currentUser = localStorage.getItem('gravity_username');
+let jwtToken = localStorage.getItem('endless_jwt_token');
+let currentUser = localStorage.getItem('endless_username');
 
 // Generate UI overlay for automation dynamically
 const overlay = document.createElement('div');
@@ -85,6 +93,7 @@ function applySettings() {
     dom.settingHomePage.value = settings.homePage || HOME_URL;
     dom.settingSearchEngine.value = settings.searchEngine || 'google';
     dom.settingBackendUrl.value = settings.backendUrl || BACKEND_URL;
+    if (dom.settingGeminiKey) dom.settingGeminiKey.value = settings.geminiKey || '';
     dom.settingAutoOpen.checked = settings.autoOpen || false;
     if (settings.accentColor) {
         document.documentElement.style.setProperty('--accent', settings.accentColor);
@@ -127,6 +136,11 @@ function createTab(url) {
         switchToTab(tabId);
     });
 
+    tabEl.addEventListener('dblclick', (e) => {
+        if (e.target.closest('.tab-close')) return;
+        closeTab(tabId);
+    });
+
     tabEl.querySelector('.tab-close').addEventListener('click', (e) => {
         e.stopPropagation();
         closeTab(tabId);
@@ -135,7 +149,7 @@ function createTab(url) {
     const webview = document.createElement('webview');
     webview.src = url;
     webview.setAttribute('autosize', 'on');
-    webview.setAttribute('partition', 'persist:gravity');
+    webview.setAttribute('partition', 'persist:endless');
     webview.style.cssText = 'flex:1; border:none; display:none; width:100%; height:100%;';
     dom.browserPane.appendChild(webview);
 
@@ -282,7 +296,7 @@ function toggleBookmark() {
     } else {
         bookmarks.push({ title: tab.title || 'Untitled', url, time: Date.now() });
     }
-    storage.set('gravity_bookmarks', bookmarks);
+    storage.set('endless_bookmarks', bookmarks);
     updateBookmarkStar();
     if (dom.statBookmarks) dom.statBookmarks.textContent = bookmarks.length;
 }
@@ -321,7 +335,7 @@ function renderBookmarks() {
         btn.addEventListener('click', (e) => {
             e.stopPropagation();
             bookmarks.splice(parseInt(btn.dataset.idx), 1);
-            storage.set('gravity_bookmarks', bookmarks);
+            storage.set('endless_bookmarks', bookmarks);
             renderBookmarks();
             updateBookmarkStar();
         });
@@ -340,7 +354,7 @@ function addToHistory(title, url) {
     if (history.length > 0 && history[0].url === url) return;
     history.unshift({ title: title || url, url, time: Date.now() });
     if (history.length > 500) history.length = 500;
-    storage.set('gravity_history', history);
+    storage.set('endless_history', history);
     if (dom.statHistory) dom.statHistory.textContent = history.length;
 }
 
@@ -372,7 +386,7 @@ function renderHistory() {
         btn.addEventListener('click', (e) => {
             e.stopPropagation();
             history.splice(parseInt(btn.dataset.idx), 1);
-            storage.set('gravity_history', history);
+            storage.set('endless_history', history);
             renderHistory();
         });
     });
@@ -380,7 +394,7 @@ function renderHistory() {
 
 dom.clearHistoryBtn.addEventListener('click', () => {
     history = [];
-    storage.set('gravity_history', history);
+    storage.set('endless_history', history);
     renderHistory();
     if (dom.statHistory) dom.statHistory.textContent = 0;
 });
@@ -444,8 +458,9 @@ dom.saveSettingsBtn.addEventListener('click', () => {
     settings.homePage = dom.settingHomePage.value || HOME_URL;
     settings.searchEngine = dom.settingSearchEngine.value || 'google';
     settings.backendUrl = dom.settingBackendUrl.value || BACKEND_URL;
+    settings.geminiKey = (dom.settingGeminiKey && dom.settingGeminiKey.value) || '';
     settings.autoOpen = dom.settingAutoOpen.checked;
-    storage.set('gravity_settings', settings);
+    storage.set('endless_settings', settings);
     closePanel('settingsPanel');
 });
 
@@ -462,7 +477,7 @@ function updateProfileStats() {
 dom.saveProfileBtn.addEventListener('click', () => {
     profile.name = dom.profileName.value;
     profile.email = dom.profileEmail.value;
-    storage.set('gravity_profile', profile);
+    storage.set('endless_profile', profile);
     closePanel('profilePanel');
 });
 
@@ -521,7 +536,16 @@ document.addEventListener('keydown', (e) => {
     if ((e.ctrlKey || e.metaKey) && e.key === 't') { e.preventDefault(); createTab(); }
     if ((e.ctrlKey || e.metaKey) && e.key === 'w') { e.preventDefault(); if (activeTabId) closeTab(activeTabId); }
     if ((e.ctrlKey || e.metaKey) && e.key === '/') { e.preventDefault(); toggleSidebar(); }
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') { e.preventDefault(); toggleCmdPalette(); }
+    
+    if (cmdPaletteOpen) {
+        if (e.key === 'ArrowDown') { e.preventDefault(); selectCmdItem(1); }
+        if (e.key === 'ArrowUp') { e.preventDefault(); selectCmdItem(-1); }
+        if (e.key === 'Enter') { e.preventDefault(); executeSelectedCmdItem(); }
+    }
+    
     if (e.key === 'Escape') {
+        if (cmdPaletteOpen) toggleCmdPalette();
         if (isSidebarOpen) toggleSidebar();
         document.querySelectorAll('.overlay-panel:not(.hidden)').forEach(p => closePanel(p.id));
         if (menuOpen) closeMenu();
@@ -577,6 +601,12 @@ function handleStatus(status) {
     } else {
         setStatus('connected', 'Ready');
         dom.sendBtn.classList.remove('hidden'); dom.stopBtn.classList.add('hidden'); dom.chatInput.disabled = false;
+        // When backend sends 'idle' or 'done', also clean up automation state
+        if (automationRunning && (s === 'idle' || s === 'done')) {
+            automationRunning = false;
+            const overlay = document.getElementById('automationOverlay');
+            if (overlay) overlay.classList.add('hidden');
+        }
         if (s === 'done') appendLog('Task completed.', 'success');
     }
 }
@@ -637,8 +667,15 @@ async function appendAssistantMessage(text) {
     div.innerHTML = `<div class="msg-avatar"><i class="fa-solid fa-sparkles"></i></div><div class="msg-content"><div class="msg-text"></div></div>`;
     dom.chatMessages.appendChild(div);
     const textEl = div.querySelector('.msg-text');
-    textEl.textContent = text;
-    scrollChat();
+    
+    if (typeof marked !== 'undefined') {
+        textEl.innerHTML = marked.parse(text);
+        scrollChat();
+    } else {
+        // Fallback
+        textEl.textContent = text;
+        scrollChat();
+    }
 }
 
 function createAssistantMessageBubble() {
@@ -695,228 +732,68 @@ function appendLog(text) {
 }
 
 // ==============================================
-// NATIVE AUTOMATION
+// SELENIUM-POWERED AUTOMATION (Backend-driven)
 // ==============================================
-
-async function executeActions(wv, actions, originalCommand) {
-    const userWantsSubmit = originalCommand && 
-        (originalCommand.toLowerCase().includes('submit') || 
-         originalCommand.toLowerCase().includes('send'));
-
-    for (const action of actions) {
-        if (!automationRunning) break;
-        
-        await new Promise(resolve => setTimeout(resolve, 600 + Math.random() * 800));
-        const { action: type, targetId, value, reason } = action;
-        
-        appendLog(`Action: ${type} - ${reason}`, 'acting');
-        if (reason) appendAssistantMessage(`🤖 ${reason}`);
-
-        try {
-            switch(type) {
-                case 'click':
-                    await wv.executeJavaScript(`
-                        (() => {
-                            const el = document.querySelector('[data-gravity-id="${targetId}"]');
-                            if (!el) { console.warn('Element not found: ${targetId}'); return; }
-                            el.dispatchEvent(new MouseEvent('mouseover', { bubbles: true }));
-                            el.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
-                            if (el.type === 'radio' || el.type === 'checkbox') {
-                                el.checked = true;
-                                el.dispatchEvent(new Event('change', { bubbles: true }));
-                            }
-                            el.click();
-                        })()
-                    `);
-                    break;
-                    
-                case 'type':
-                    await wv.executeJavaScript(`
-                        (() => {
-                            const el = document.querySelector('[data-gravity-id="${targetId}"]');
-                            if (!el) return;
-                            el.focus();
-                            el.value = ${JSON.stringify(value)};
-                            el.dispatchEvent(new Event('input', { bubbles: true }));
-                            el.dispatchEvent(new Event('change', { bubbles: true }));
-                        })()
-                    `);
-                    break;
-                    
-                case 'select':
-                    await wv.executeJavaScript(`
-                        (() => {
-                            const el = document.querySelector('[data-gravity-id="${targetId}"]');
-                            if (!el) return;
-                            // Try matching by value or text
-                            const opts = Array.from(el.options);
-                            const match = opts.find(o => 
-                                o.text.toLowerCase().includes("${value}".toLowerCase()) ||
-                                o.value.toLowerCase().includes("${value}".toLowerCase())
-                            );
-                            if (match) el.value = match.value;
-                            else el.value = "${value}";
-                            el.dispatchEvent(new Event('change', { bubbles: true }));
-                        })()
-                    `);
-                    break;
-                    
-                case 'scroll':
-                    await wv.executeJavaScript(`window.scrollBy(0, ${value || 400})`);
-                    break;
-                    
-                case 'navigate':
-                    await wv.loadURL(value.startsWith('http') ? value : 'https://' + value);
-                    await new Promise(r => setTimeout(r, 2000));
-                    break;
-                    
-                case 'keypress':
-                    await wv.executeJavaScript(`
-                        (() => {
-                            const el = document.querySelector('[data-gravity-id="${targetId}"]');
-                            if (el) el.dispatchEvent(new KeyboardEvent('keydown', 
-                                { key: "${value}", bubbles: true }));
-                        })()
-                    `);
-                    break;
-                    
-                case 'done':
-                    return true;
-            }
-        } catch (err) {
-            appendLog(`Action error: ${err.message}`, 'error');
-        }
-        appendLog(`Finished: ${reason}`, 'success');
-    }
-    return true;
-}
 
 async function runAutomationTask(instruction) {
     const wv = getActiveWebview();
-    if (!wv) {
-        appendAssistantMessage('No active tab to control.');
+    const currentUrl = wv ? wv.getURL() : 'https://www.google.com';
+    const backendUrl = settings.backendUrl || BACKEND_URL;
+
+    if (automationRunning) {
+        appendAssistantMessage('⚠️ Automation already running. Click Stop first.');
+        removeThinkingIndicator();
         return;
     }
 
     automationRunning = true;
-    const backendUrl = settings.backendUrl || BACKEND_URL;
     document.getElementById('automationOverlay').classList.remove('hidden');
+    handleStatus('thinking');
 
     try {
-        // 1. Start session
-        appendLog('Starting automation session...');
-        const startResp = await fetch(backendUrl + '/api/automation/start', {
+        appendLog('🚀 Starting Selenium automation: ' + instruction);
+        appendAssistantMessage('🚀 Starting automation with Selenium... A Chrome window will open.');
+
+        // Try the new Selenium endpoint first
+        let resp = await fetch(backendUrl + '/api/automation/run', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ command: instruction })
+            body: JSON.stringify({ command: instruction, url: currentUrl })
         });
-        const session = await startResp.json();
-        const sessionId = session.id;
 
-        for (let step = 0; step < 10 && automationRunning; step++) {
-            appendLog(`Step ${step + 1}: Capturing screen and DOM...`);
-            
-            const base64Img = step === 0 
-                ? (await wv.capturePage()).toDataURL('image/jpeg', 0.4) 
-                : null;
-            
-            if (step === 0 && base64Img) appendAssistantImage(base64Img);
-
-            // Extract DOM
-            const domElements = await wv.executeJavaScript(`
-                (() => {
-                    const results = [];
-                    document.querySelectorAll(
-                        'input:not([type="hidden"]), button, select, textarea, ' +
-                        '[role="button"], [role="combobox"], [role="searchbox"], ' + 
-                        '[role="textbox"], a, label'
-                    ).forEach((el, i) => {
-                        const rect = el.getBoundingClientRect();
-                        if (rect.width === 0 || rect.height === 0) return;
-                        const tag = el.tagName.toLowerCase();
-                        const isInteractive = ['input', 'button', 'select', 'textarea', 'a'].includes(tag) || el.getAttribute('role') === 'button';
-                        if (isInteractive) el.setAttribute('data-gravity-id', i);
-
-                        let labelText = '';
-                        if (tag === 'input' && (el.type === 'radio' || el.type === 'checkbox')) {
-                            const label = document.querySelector('label[for="' + el.id + '"]') || el.closest('label');
-                            if (label) labelText = label.innerText;
-                        }
-
-                        results.push({
-                            id: isInteractive ? i : null,
-                            tag: tag,
-                            type: el.type || '',
-                            value: el.value || '',
-                            text: (el.innerText || '').trim().substring(0, 100),
-                            labelText: labelText.trim(),
-                            isInteractive: isInteractive,
-                            attributes: el.name ? { name: el.name } : {}
-                        });
-                    });
-                    return JSON.stringify(results.slice(0, 100));
-                })()
-            `);
-
-            const pageText = await wv.executeJavaScript(`document.body.innerText.substring(0, 3000)`);
-            const currentUrl = wv.getURL();
-            
-            appendAssistantMessage(`Step ${step + 1}: AI is thinking...`);
-            handleStatus('thinking');
-
-            const resp = await fetch(backendUrl + '/api/automation/step', {
+        if (!resp.ok) {
+            // Fallback to gravity/start endpoint
+            resp = await fetch(backendUrl + '/api/gravity/start', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ 
-                    sessionId: sessionId,
-                    screenshot: step === 0 ? base64Img : null, 
-                    dom: domElements,
-                    pageText: pageText,
-                    url: currentUrl
-                })
+                body: JSON.stringify({ instruction: instruction, url: currentUrl })
             });
-
-            if (!resp.ok) {
-                appendAssistantMessage('Automation backend error.');
-                break;
-            }
-
-            const result = await resp.json();
-            
-            if (result.status === 'DONE') {
-                appendAssistantMessage('✅ Task complete!');
-                break;
-            }
-
-            if (result.status === 'NEEDS_CONFIRMATION') {
-                // First execute the safe fill actions
-                handleStatus('acting');
-                await executeActions(wv, result.actions || [], instruction);
-                appendAssistantMessage('⚠️ ' + result.message);
-                appendAssistantMessage('✅ Form filled! Click Submit manually now.');
-                automationRunning = false;
-                break;
-            }
-
-            // 3. Act
-            handleStatus('acting');
-            const success = await executeActions(wv, result.actions || [], instruction);
-            if (!success) break;
-            
-            await new Promise(r => setTimeout(r, 800));
         }
 
+        if (resp.ok) {
+            const data = await resp.json();
+            appendLog('✅ ' + (data.message || 'Automation started'), 'success');
+            appendAssistantMessage('🤖 Automation started! Watch the Chrome window. Progress updates will appear here.');
+        } else {
+            const errData = await resp.json().catch(() => ({ message: 'Server error' }));
+            appendLog('❌ ' + (errData.message || 'Failed to start automation'), 'error');
+            appendAssistantMessage('❌ ' + (errData.message || 'Failed to start automation'));
+            automationRunning = false;
+            document.getElementById('automationOverlay').classList.add('hidden');
+            handleStatus('idle');
+        }
+        // Note: Progress updates come via WebSocket. The overlay and status
+        // will be updated by handleStatus() when the backend sends 'idle'/'done'.
     } catch (e) {
-        appendLog(`Automation loop error: ${e.message}`, 'error');
-    } finally {
-        const overlay = document.getElementById('automationOverlay');
-        if (overlay) overlay.classList.add('hidden');
+        appendLog('❌ Connection error: ' + e.message, 'error');
+        appendAssistantMessage('❌ Could not connect to backend: ' + e.message);
         automationRunning = false;
+        document.getElementById('automationOverlay').classList.add('hidden');
         handleStatus('idle');
     }
 }
 
-// Smart send: if message starts with "/do " use automation endpoint, otherwise use chat
+// Smart send: if message starts with "/do " use automation (Selenium), otherwise use chat
 async function sendMessage() {
     const text = dom.chatInput.value.trim();
     if (!text && !currentAttachedImage) return;
@@ -925,6 +802,9 @@ async function sendMessage() {
 
     dom.chatInput.value = '';
     dom.chatInput.style.height = 'auto';
+    // Hide slash menu on send
+    const slashMenu = document.getElementById('slashCommandsMenu');
+    if (slashMenu) slashMenu.classList.add('hidden');
     
     // Grab the image before clearing state
     const sentImage = currentAttachedImage;
@@ -933,19 +813,21 @@ async function sendMessage() {
     if (!isSidebarOpen) toggleSidebar();
     showThinkingIndicator();
 
-    const automationKeywords = ['fill', 'submit', 'click', 'search', 'answer', 'solve', 'do ', 'automate', 'buy', 'pay', 'login', 'register', 'type', 'go to', 'navigate'];
+    // FIX: Only trigger automation with explicit /do command or exact action commands
+    // This prevents normal chat from being hijacked by broad keyword matching
     const lowerText = (text || '').toLowerCase();
     const isAutomation = text && (
-        text.startsWith('/') || // Any slash command
-        automationKeywords.some(k => lowerText.includes(k)) ||
-        lowerText.includes('task') ||
-        lowerText.includes('form') ||
-        lowerText.includes('quiz')
+        text.startsWith('/do') ||        // Explicit /do command
+        text.startsWith('/extract')      // Explicit /extract command
     );
+    const isSummarize = text && text.startsWith('/summarize');
+    const isSearchCmd = text && text.startsWith('/search');
+    
+    // (isSummarize and isSearchCmd defined above)
 
     const backendUrl = settings.backendUrl || BACKEND_URL;
 
-    if (isAutomation) {
+    if (isAutomation && !isSummarize && !isSearchCmd) {
         let instruction = text
             .replace(/^\/do\s+/i, '')
             .replace(/^\/automate\s+/i, '')
@@ -960,6 +842,61 @@ async function sendMessage() {
         appendLog('Automation started: ' + instruction);
         // Kick off asynchronous native loop
         runAutomationTask(instruction);
+    } else if (isSummarize) {
+        // Summarize the current page via chat
+        try {
+            const wv = getActiveWebview();
+            let pageContent = '';
+            if (wv) {
+                pageContent = await wv.executeJavaScript(`document.body.innerText.substring(0, 8000)`);
+            }
+            const chatMsg = `Please summarize the following web page content:
+---
+${pageContent}
+---`;
+            if (chatAbortController) chatAbortController.abort();
+            chatAbortController = new AbortController();
+            handleStatus('thinking');
+            const resp = await fetch(backendUrl + '/api/gravity/chat/stream', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'Authorization': jwtToken ? `Bearer ${jwtToken}` : '' },
+                body: JSON.stringify({ message: chatMsg, sessionId: chatSessionId }),
+                signal: chatAbortController.signal
+            });
+            if (!resp.ok) throw new Error('Network response was not ok');
+            removeThinkingIndicator();
+            const textEl = createAssistantMessageBubble();
+            const reader = resp.body.getReader();
+            const decoder = new TextDecoder();
+            let sseBuffer = '';
+            let accumulatedResponse = '';
+            while (true) {
+                const { done, value } = await reader.read();
+                if (done) break;
+                const chunk = decoder.decode(value, { stream: true });
+                sseBuffer += chunk;
+                const eventBlocks = sseBuffer.split('\n\n');
+                sseBuffer = eventBlocks.pop();
+                for (const block of eventBlocks) {
+                    const lines = block.split('\n');
+                    for (const line of lines) {
+                        if (line.startsWith('data:')) {
+                            let contentString = line.slice(5).trim();
+                            if (contentString) {
+                                try { let j = JSON.parse(contentString); if (j.content) accumulatedResponse += j.content; } 
+                                catch (e) { accumulatedResponse += line.slice(5).replace(/^ /, ''); }
+                            }
+                        }
+                    }
+                }
+                if (typeof marked !== 'undefined') textEl.innerHTML = marked.parse(accumulatedResponse);
+                else textEl.textContent = accumulatedResponse;
+                scrollChat();
+            }
+        } catch (err) {
+            removeThinkingIndicator();
+            if (err.name !== 'AbortError') appendAssistantMessage('Error: ' + err.message);
+        } finally { chatAbortController = null; handleStatus('idle'); }
     } else {
         // Chat-only Q&A with Streaming
         try {
@@ -993,6 +930,7 @@ async function sendMessage() {
             
             const reader = resp.body.getReader();
             const decoder = new TextDecoder();
+            let sseBuffer = '';
             let accumulatedResponse = '';
 
             while (true) {
@@ -1000,20 +938,37 @@ async function sendMessage() {
                 if (done) break;
                 
                 const chunk = decoder.decode(value, { stream: true });
-                const lines = chunk.split('\n');
-                for (const line of lines) {
-                    if (line.startsWith('data:')) {
-                        const content = line.slice(5).trim();
-                        accumulatedResponse += content;
-                        textEl.textContent = accumulatedResponse;
-                        scrollChat();
-                    } else if (line.trim() && !line.startsWith(':')) {
-                        // Fallback: if not SSE, treat as raw data
-                        accumulatedResponse += line.trim();
-                        textEl.textContent = accumulatedResponse;
-                        scrollChat();
+                sseBuffer += chunk;
+                
+                const eventBlocks = sseBuffer.split('\n\n');
+                sseBuffer = eventBlocks.pop(); // Keep incomplete block in buffer
+                
+                for (const block of eventBlocks) {
+                    const lines = block.split('\n');
+                    for (const line of lines) {
+                        if (line.startsWith('data:')) {
+                            let contentString = line.slice(5).trim();
+                            if (contentString) {
+                                try {
+                                    let jsonDecoded = JSON.parse(contentString);
+                                    if (jsonDecoded.content) {
+                                        accumulatedResponse += jsonDecoded.content;
+                                    }
+                                } catch (e) {
+                                    // Fallback if not JSON
+                                    accumulatedResponse += line.slice(5).replace(/^ /, '');
+                                }
+                            }
+                        }
                     }
                 }
+                
+                if (typeof marked !== 'undefined') {
+                    textEl.innerHTML = marked.parse(accumulatedResponse);
+                } else {
+                    textEl.textContent = accumulatedResponse;
+                }
+                scrollChat();
             }
         } catch (err) {
             removeThinkingIndicator();
@@ -1034,6 +989,22 @@ async function stopTask() {
         chatAbortController.abort();
         chatAbortController = null;
     }
+    
+    // Stop Selenium automation on the backend too
+    if (automationRunning) {
+        const backendUrl = settings.backendUrl || BACKEND_URL;
+        try {
+            await fetch(backendUrl + '/api/automation/stop', { method: 'POST' });
+        } catch (e) {
+            console.warn('Could not send stop to backend:', e);
+        }
+        try {
+            await fetch(backendUrl + '/api/gravity/stop', { method: 'POST' });
+        } catch (e) {
+            console.warn('Could not send stop to backend:', e);
+        }
+    }
+    
     automationRunning = false;
     const overlay = document.getElementById('automationOverlay');
     if (overlay) overlay.classList.add('hidden');
@@ -1059,29 +1030,42 @@ function updateAuthUI() {
 async function loginUser() {
     const user = document.getElementById('loginUsername').value;
     const pass = document.getElementById('loginPassword').value;
+    if (!user || !pass) return alert('Fill in all fields');
     const url = settings.backendUrl || BACKEND_URL;
     
+    const submitBtn = document.getElementById('loginSubmit');
+    submitBtn.textContent = 'Signing In...';
     try {
         const resp = await fetch(url + '/api/auth/login', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ username: user, password: pass })
         });
-        const data = await resp.json();
+        
+        const rawText = await resp.text();
+        let data = {};
+        try {
+            data = JSON.parse(rawText);
+        } catch(e) {
+            data = { message: 'Unexpected server response (Code ' + resp.status + ')' };
+        }
+
         if (resp.ok) {
             jwtToken = data.token;
             currentUser = data.username;
-            localStorage.setItem('gravity_jwt_token', jwtToken);
-            localStorage.setItem('gravity_username', currentUser);
+            localStorage.setItem('endless_jwt_token', jwtToken);
+            localStorage.setItem('endless_username', currentUser);
             document.getElementById('loginOverlay').classList.add('hidden');
             updateAuthUI();
             appendAssistantMessage(`Welcome back, ${currentUser}! History synced.`);
             fetchHistory();
         } else {
-            alert(data.message || 'Login failed');
+            alert(data.message || 'Login failed - Incorrect credentials');
         }
     } catch (err) {
-        alert('Error: ' + err.message);
+        alert('Network or Server Error: ' + err.message);
+    } finally {
+        submitBtn.textContent = 'Sign In';
     }
 }
 
@@ -1089,15 +1073,26 @@ async function signupUser() {
     const user = document.getElementById('signupUsername').value;
     const email = document.getElementById('signupEmail').value;
     const pass = document.getElementById('signupPassword').value;
+    if (!user || !email || !pass) return alert('Fill in all fields');
     const url = settings.backendUrl || BACKEND_URL;
     
+    const submitBtn = document.getElementById('signupSubmit');
+    submitBtn.textContent = 'Creating...';
     try {
         const resp = await fetch(url + '/api/auth/signup', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ username: user, email: email, password: pass })
         });
-        const data = await resp.json();
+        
+        const rawText = await resp.text();
+        let data = {};
+        try {
+            data = JSON.parse(rawText);
+        } catch(e) {
+            data = { message: 'Unexpected server response (Code ' + resp.status + ')' };
+        }
+
         if (resp.ok) {
             alert('Account created! Please login.');
             document.getElementById('signupOverlay').classList.add('hidden');
@@ -1106,15 +1101,17 @@ async function signupUser() {
             alert(data.message || 'Signup failed');
         }
     } catch (err) {
-        alert('Error: ' + err.message);
+        alert('Network or Server Error: ' + err.message);
+    } finally {
+        submitBtn.textContent = 'Create Account';
     }
 }
 
 function logout() {
     jwtToken = null;
     currentUser = null;
-    localStorage.removeItem('gravity_jwt_token');
-    localStorage.removeItem('gravity_username');
+    localStorage.removeItem('endless_jwt_token');
+    localStorage.removeItem('endless_username');
     updateAuthUI();
     appendAssistantMessage('Logged out successfully.');
     document.getElementById('chatHistoryList').innerHTML = '<div class="empty-state"><p>Login to see history.</p></div>';
@@ -1124,12 +1121,12 @@ function logout() {
 async function fetchHistory() {
     if (!jwtToken) {
         document.getElementById('chatHistoryList').innerHTML = 
-            '<div class="empty-state"><p>Please login to see history.</p></div>';
+            '<div class="empty-state"><i class="fa-solid fa-lock"></i><p>Please login to see history.</p></div>';
         return;
     }
     
     const list = document.getElementById('chatHistoryList');
-    list.innerHTML = '<div class="loading"><i class="fa-solid fa-spinner fa-spin"></i> Loading...</div>';
+    list.innerHTML = '<div class="loading" style="padding: 20px; text-align: center;"><i class="fa-solid fa-spinner fa-spin"></i> Loading...</div>';
     const url = settings.backendUrl || BACKEND_URL;
     
     try {
@@ -1138,16 +1135,18 @@ async function fetchHistory() {
         });
         if (resp.ok) {
             const data = await resp.json();
-            renderHistory(data);
+            renderChatHistory(data);
+        } else if (resp.status === 401) {
+            logout();
         } else {
-            list.innerHTML = '<div class="error">Failed to load history.</div>';
+            list.innerHTML = '<div class="error" style="padding: 20px; color: var(--danger);">Failed to load history.</div>';
         }
     } catch (err) {
-        list.innerHTML = '<div class="error">Error connecting to server.</div>';
+        list.innerHTML = '<div class="error" style="padding: 20px; color: var(--danger);">Error connecting to server.</div>';
     }
 }
 
-function renderHistory(messages) {
+function renderChatHistory(messages) {
     const list = document.getElementById('chatHistoryList');
     if (!messages || messages.length === 0) {
         list.innerHTML = '<div class="empty-state"><p>No history yet.</p></div>';
@@ -1178,18 +1177,29 @@ function renderHistory(messages) {
         const item = document.createElement('div');
         item.className = 'history-item';
         item.innerHTML = `
-            <div class="history-item-date">${sess.date}</div>
+            <div class="history-item-date"><i class="fa-regular fa-clock"></i> ${sess.date}</div>
             <div class="history-item-preview">${sess.title}</div>
         `;
         item.addEventListener('click', () => {
             // Restore session
             chatSessionId = sid;
-            storage.set('gravity_chat_session', chatSessionId);
+            storage.set('endless_chat_session', chatSessionId);
             // Clear current chat display and ideally reload session messages
             document.getElementById('chatMessages').innerHTML = '';
             messages.filter(m => m.sessionId === sid).forEach(m => {
                 if (m.role === 'user') appendUserMessage(m.content);
-                else appendAssistantMessage(m.content);
+                else {
+                    const tempDiv = document.createElement('div');
+                    tempDiv.className = 'chat-msg assistant-msg';
+                    tempDiv.innerHTML = `<div class="msg-avatar"><i class="fa-solid fa-sparkles"></i></div><div class="msg-content"><div class="msg-text"></div></div>`;
+                    document.getElementById('chatMessages').appendChild(tempDiv);
+                    if (typeof marked !== 'undefined') {
+                        tempDiv.querySelector('.msg-text').innerHTML = marked.parse(m.content);
+                    } else {
+                        tempDiv.querySelector('.msg-text').textContent = m.content;
+                    }
+                    scrollChat();
+                }
             });
             // Switch to chat panel
             document.querySelector('[data-panel="chatPanel"]').click();
@@ -1198,10 +1208,49 @@ function renderHistory(messages) {
     });
 }
 
-dom.chatInput.addEventListener('input', function () { this.style.height = 'auto'; this.style.height = Math.min(this.scrollHeight, 120) + 'px'; });
+const slashConfig = [
+    { cmd: '/do', desc: 'Automate a web task (e.g. /do fill login form)', icon: 'fa-robot' },
+    { cmd: '/summarize', desc: 'Summarize the current page', icon: 'fa-file-lines' },
+    { cmd: '/search', desc: 'Search the web using AI', icon: 'fa-magnifying-glass' },
+    { cmd: '/extract', desc: 'Extract data from page into a table', icon: 'fa-table' }
+];
+
+function renderSlashMenu(query) {
+    const list = document.getElementById('slashCommandsMenu');
+    const filtered = slashConfig.filter(c => c.cmd.startsWith(query.toLowerCase()));
+    if (filtered.length === 0) { list.innerHTML = '<div style="padding: 15px; color: var(--text-muted); font-size: 13px; text-align: center;">No commands match</div>'; return; }
+    list.innerHTML = filtered.map(c => `
+        <div class="slash-item" style="padding: 12px 16px; display: flex; align-items: center; gap: 12px; cursor: pointer; border-bottom: 1px solid rgba(255,255,255,0.05);" data-cmd="${c.cmd} " onmouseover="this.style.background='rgba(255,255,255,0.05)'" onmouseout="this.style.background='none'">
+            <div style="background: rgba(124,106,255,0.2); width: 28px; height: 28px; border-radius: 6px; display: flex; align-items: center; justify-content: center; color: var(--accent-light);"><i class="fa-solid ${c.icon}"></i></div>
+            <div style="flex: 1;">
+                <div style="font-weight: 600; font-size: 13px; color: var(--text-primary);">${c.cmd}</div>
+                <div style="font-size: 12px; color: var(--text-muted);">${c.desc}</div>
+            </div>
+        </div>
+    `).join('');
+    list.querySelectorAll('.slash-item').forEach(item => {
+        item.addEventListener('click', () => {
+            dom.chatInput.value = item.dataset.cmd;
+            dom.chatInput.focus();
+            list.classList.add('hidden');
+        });
+    });
+}
+
+dom.chatInput.addEventListener('input', function () { 
+    this.style.height = 'auto'; this.style.height = Math.min(this.scrollHeight, 120) + 'px'; 
+    const val = this.value;
+    const slashMenu = document.getElementById('slashCommandsMenu');
+    if (val.startsWith('/')) { slashMenu.classList.remove('hidden'); renderSlashMenu(val); } 
+    else { slashMenu.classList.add('hidden'); }
+});
 dom.sendBtn.addEventListener('click', sendMessage);
 dom.stopBtn.addEventListener('click', stopTask);
 dom.chatInput.addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); } });
+
+// Add enter key support for forms
+document.getElementById('loginPassword').addEventListener('keydown', (e) => { if (e.key === 'Enter') loginUser(); });
+document.getElementById('signupPassword').addEventListener('keydown', (e) => { if (e.key === 'Enter') signupUser(); });
 
 // ==============================================
 // UTILITIES
@@ -1216,6 +1265,122 @@ function timeAgo(ts) {
     if (diff < 86400000) return Math.floor(diff / 3600000) + 'h ago';
     return new Date(ts).toLocaleDateString();
 }
+
+// ── MICRO INTERACTIONS ──
+document.addEventListener('click', function(e) {
+    const btn = e.target.closest('.nav-btn, .sidebar-tab, .sidebar-close-btn, .send-btn, .auth-btn, .save-settings-btn, .titlebar-btn, .new-tab-btn, .list-item');
+    if (btn) {
+        const rect = btn.getBoundingClientRect();
+        const ripple = document.createElement('span');
+        const dia = Math.max(btn.clientWidth, btn.clientHeight);
+        const radius = dia / 2;
+        ripple.style.width = ripple.style.height = `${dia}px`;
+        ripple.style.left = `${e.clientX - rect.left - radius}px`;
+        ripple.style.top = `${e.clientY - rect.top - radius}px`;
+        ripple.className = 'ripple';
+        
+        if (window.getComputedStyle(btn).position === 'static') {
+            btn.style.position = 'relative';
+        }
+        btn.style.overflow = 'hidden';
+        btn.appendChild(ripple);
+        
+        setTimeout(() => ripple.remove(), 600);
+    }
+});
+
+// ── COMMAND PALETTE Logic ──
+function toggleCmdPalette() {
+    cmdPaletteOpen = !cmdPaletteOpen;
+    cmdPaletteOverlay.classList.toggle('hidden', !cmdPaletteOpen);
+    if (cmdPaletteOpen) { cmdInput.value = ''; renderCmdResults(''); setTimeout(() => cmdInput.focus(), 50); }
+}
+
+function selectCmdItem(dir) {
+    if (currentCmdItems.length === 0) return;
+    cmdSelectedIndex = (cmdSelectedIndex + dir + currentCmdItems.length) % currentCmdItems.length;
+    document.querySelectorAll('.cmd-result-item').forEach((el, i) => {
+        el.classList.toggle('selected', i === cmdSelectedIndex);
+        if (i === cmdSelectedIndex) el.scrollIntoView({ block: 'nearest' });
+    });
+}
+
+function executeSelectedCmdItem() {
+    if (currentCmdItems.length === 0) return;
+    const item = currentCmdItems[cmdSelectedIndex];
+    toggleCmdPalette(); // close
+    if (item.type === 'tab') { switchToTab(item.id); } 
+    else if (item.type === 'action') { item.action(); }
+    else { createTab(item.url); }
+}
+
+function renderCmdResults(query) {
+    query = query.toLowerCase();
+    let results = [];
+    
+    // Actions if starts with >
+    if (query.startsWith('>')) {
+        const actionQ = query.slice(1).trim();
+        const actions = [
+            { id: 'a1', title: 'New Tab', icon: 'fa-plus', type: 'action', action: createTab },
+            { id: 'a2', title: 'Toggle AI Assistant', icon: 'fa-sparkles', type: 'action', action: toggleSidebar },
+            { id: 'a3', title: 'Open Settings', icon: 'fa-gear', type: 'action', action: () => openPanel('settingsPanel') },
+            { id: 'a4', title: 'View History', icon: 'fa-clock-rotate-left', type: 'action', action: () => { openPanel('browsingHistoryPanel'); renderHistory(); } }
+        ];
+        results = actions.filter(a => a.title.toLowerCase().includes(actionQ));
+    } else {
+        // Open Tabs
+        tabs.forEach((tab, id) => {
+            if (tab.title.toLowerCase().includes(query) || (tab.url||'').toLowerCase().includes(query)) {
+                results.push({ id, title: tab.title, desc: tab.url, icon: 'fa-globe', type: 'tab' });
+            }
+        });
+        // Bookmarks
+        bookmarks.forEach(b => {
+             if (b.title.toLowerCase().includes(query) || b.url.toLowerCase().includes(query)) {
+                results.push({ id: b.url, title: b.title, desc: b.url, icon: 'fa-star', type: 'bookmark', url: b.url });
+             }
+        });
+        // History limit 5
+        history.slice(0, 20).forEach(h => {
+             if (h.title.toLowerCase().includes(query) || h.url.toLowerCase().includes(query)) {
+                 if (!results.some(r => r.url === h.url)) {
+                    results.push({ id: h.url, title: h.title, desc: h.url, icon: 'fa-clock-rotate-left', type: 'history', url: h.url });
+                 }
+             }
+        });
+    }
+
+    currentCmdItems = results.slice(0, 8); // Limits length UI
+    cmdSelectedIndex = 0;
+    
+    if (currentCmdItems.length === 0) {
+        cmdResults.innerHTML = '<div style="padding: 20px; text-align: center; color: var(--text-muted);">No matching results found</div>';
+        return;
+    }
+
+    cmdResults.innerHTML = currentCmdItems.map((r, i) => `
+        <div class="cmd-result-item ${i === 0 ? 'selected' : ''}" data-idx="${i}">
+            <div class="cmd-result-icon"><i class="fa-solid ${r.icon}"></i></div>
+            <div style="flex: 1; overflow: hidden;">
+                <div style="font-weight: 500; font-size: 14px; text-overflow: ellipsis; white-space: nowrap; overflow: hidden; color: var(--text-primary);">${escapeHtml(r.title)}</div>
+                ${r.desc ? `<div style="font-size: 12px; color: var(--text-muted); text-overflow: ellipsis; white-space: nowrap; overflow: hidden;">${escapeHtml(r.desc)}</div>` : ''}
+            </div>
+            ${r.type === 'action' ? '<div style="font-size: 11px; color: var(--text-muted); background: var(--bg-tertiary); padding: 2px 6px; border-radius: 4px;">Command</div>' : ''}
+            ${r.type === 'tab' ? '<div style="font-size: 11px; color: var(--text-muted); background: var(--bg-tertiary); padding: 2px 6px; border-radius: 4px;">Tab</div>' : ''}
+        </div>
+    `).join('');
+
+    cmdResults.querySelectorAll('.cmd-result-item').forEach(el => {
+        el.addEventListener('mousemove', () => {
+            cmdSelectedIndex = parseInt(el.dataset.idx);
+            document.querySelectorAll('.cmd-result-item').forEach((e, i) => e.classList.toggle('selected', i === cmdSelectedIndex));
+        });
+        el.addEventListener('click', executeSelectedCmdItem);
+    });
+}
+
+cmdInput.addEventListener('input', (e) => renderCmdResults(e.target.value));
 
 // ==============================================
 // INIT

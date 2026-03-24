@@ -1,5 +1,5 @@
 /* =============================================
-   GRAVITY BROWSER — Premium Dark Theme CSS
+   ENDLESS BROWSER — Premium Dark Theme CSS
    Inspired by Comet / Perplexity browser
    ============================================= */
 
@@ -565,11 +565,11 @@ webview,
     content: '';
     position: absolute;
     bottom: -1px;
-    left: 20%;
-    right: 20%;
+    left: 0;
+    right: 0;
     height: 2px;
     background: var(--accent);
-    border-radius: 1px;
+    border-radius: 0;
 }
 
 .sidebar-tab i {
@@ -650,6 +650,8 @@ webview,
     font-size: 13px;
     line-height: 1.6;
     color: var(--text-primary);
+    white-space: pre-wrap;
+    word-break: break-word;
 }
 
 .assistant-msg .msg-text {
@@ -707,6 +709,22 @@ webview,
     40% {
         transform: translateY(-5px);
         opacity: 1;
+    }
+}
+
+/* Ripple Effect */
+.ripple {
+    position: absolute;
+    border-radius: 50%;
+    transform: scale(0);
+    animation: ripple-anim 600ms linear;
+    background-color: rgba(255, 255, 255, 0.4);
+    pointer-events: none;
+}
+@keyframes ripple-anim {
+    to {
+        transform: scale(4);
+        opacity: 0;
     }
 }
 
@@ -1529,4 +1547,251 @@ webview,
 @keyframes wave-move {
     from { transform: rotate(0deg); }
     to { transform: rotate(360deg); }
+}
+
+/* History Panel Styling */
+.history-item {
+    padding: 15px;
+    margin: 10px 15px;
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(255, 255, 255, 0.05);
+    border-radius: 12px;
+    cursor: pointer;
+    transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
+    box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+    position: relative;
+    overflow: hidden;
+}
+
+.history-item:hover {
+    background: rgba(124, 106, 255, 0.1);
+    border-color: rgba(124, 106, 255, 0.3);
+    transform: translateY(-2px);
+    box-shadow: 0 6px 12px rgba(124, 106, 255, 0.15);
+}
+
+.history-item::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; width: 4px; height: 100%;
+    background: var(--accent);
+    opacity: 0;
+    transition: opacity 0.3s ease;
+}
+
+.history-item:hover::before {
+    opacity: 1;
+}
+
+.history-item-date {
+    font-size: 11px;
+    color: rgba(255, 255, 255, 0.5);
+    margin-bottom: 6px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.history-item-date i {
+    font-size: 10px;
+}
+
+.history-item-preview {
+    font-size: 14px;
+    color: var(--text-color);
+    line-height: 1.4;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* Premium About Panel */
+.about-overlay-special {
+    background: rgba(10, 10, 15, 0.85);
+    backdrop-filter: blur(20px);
+}
+
+.about-panel-premium {
+    position: relative;
+    width: 600px;
+    max-width: 90vw;
+    background: rgba(25, 25, 35, 0.6);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 24px;
+    padding: 50px;
+    text-align: center;
+    overflow: hidden;
+    box-shadow: 0 30px 60px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255,255,255,0.1);
+}
+
+.about-premium-close {
+    position: absolute;
+    top: 20px;
+    right: 20px;
+    background: rgba(255,255,255,0.05);
+    border: none;
+    color: var(--text-color);
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    cursor: pointer;
+    z-index: 10;
+    transition: all 0.2s;
+}
+
+.about-premium-close:hover {
+    background: rgba(255,255,255,0.15);
+    transform: rotate(90deg);
+}
+
+.about-bg-effects {
+    position: absolute;
+    inset: 0;
+    z-index: 0;
+    overflow: hidden;
+    pointer-events: none;
+}
+
+.about-glow {
+    position: absolute;
+    width: 300px;
+    height: 300px;
+    border-radius: 50%;
+    filter: blur(80px);
+    opacity: 0.5;
+}
+
+.about-glow-1 {
+    top: -100px;
+    left: -100px;
+    background: rgba(124, 106, 255, 0.4);
+    animation: drift 10s infinite alternate ease-in-out;
+}
+
+.about-glow-2 {
+    bottom: -100px;
+    right: -100px;
+    background: rgba(0, 195, 255, 0.3);
+    animation: drift 12s infinite alternate-reverse ease-in-out;
+}
+
+@keyframes drift {
+    0% { transform: translate(0, 0); }
+    100% { transform: translate(50px, 50px); }
+}
+
+.about-premium-content {
+    position: relative;
+    z-index: 1;
+}
+
+.about-logo-wrapper {
+    position: relative;
+    width: 100px;
+    height: 100px;
+    margin: 0 auto 20px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.about-logo-ring {
+    position: absolute;
+    inset: 0;
+    border-radius: 50%;
+    border: 2px dashed rgba(124, 106, 255, 0.5);
+    animation: spin 10s linear infinite;
+}
+
+@keyframes spin {
+    100% { transform: rotate(360deg); }
+}
+
+.about-logo-core {
+    font-size: 40px;
+    color: #fff;
+    background: linear-gradient(135deg, #7c6aff, #00c3ff);
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+    filter: drop-shadow(0 0 10px rgba(124, 106, 255, 0.8));
+}
+
+.about-title-premium {
+    font-size: 32px;
+    font-weight: 700;
+    letter-spacing: 1px;
+    margin-bottom: 5px;
+    color: #fff;
+}
+
+.about-title-premium span {
+    font-weight: 300;
+    opacity: 0.7;
+}
+
+.about-version-badge {
+    display: inline-block;
+    background: rgba(255, 255, 255, 0.1);
+    padding: 4px 12px;
+    border-radius: 20px;
+    font-size: 12px;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    color: #ccc;
+    margin-bottom: 30px;
+    border: 1px solid rgba(255,255,255,0.05);
+}
+
+.about-desc-premium {
+    font-size: 15px;
+    line-height: 1.6;
+    color: #b0b0c0;
+    margin-bottom: 40px;
+    max-width: 450px;
+    margin-left: auto;
+    margin-right: auto;
+}
+
+.about-tech-stack {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    justify-content: center;
+    margin-bottom: 40px;
+}
+
+.tech-item {
+    background: rgba(0, 0, 0, 0.3);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    padding: 8px 16px;
+    border-radius: 8px;
+    font-size: 13px;
+    color: #e0e0e0;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    transition: all 0.3s;
+}
+
+.tech-item:hover {
+    background: rgba(124, 106, 255, 0.2);
+    border-color: rgba(124, 106, 255, 0.5);
+    transform: translateY(-2px);
+    box-shadow: 0 5px 15px rgba(124, 106, 255, 0.2);
+}
+
+.tech-item i {
+    font-size: 16px;
+    color: #7c6aff;
+}
+
+.about-footer-premium {
+    border-top: 1px solid rgba(255, 255, 255, 0.05);
+    padding-top: 20px;
+    color: #888;
+    font-size: 12px;
 }

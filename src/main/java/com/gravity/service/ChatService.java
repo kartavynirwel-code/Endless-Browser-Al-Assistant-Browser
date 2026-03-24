@@ -51,14 +51,16 @@ public class ChatService {
         log.info("[STREAM CHAT] Received request for session: {}. Message length: {}", sessionId, message != null ? message.length() : 0);
         try {
             boolean hasImage = base64Image != null && !base64Image.isEmpty();
+            String model = hasImage ? "moondream:latest" : "phi3:mini";
+            
             OllamaOptions options = OllamaOptions.create()
-                    .withModel("moondream:latest")
+                    .withModel(model)
                     .withTemperature(0.7f);
 
-            log.info("[STREAM CHAT] Using model: moondream:latest (Image: {})", hasImage);
+            log.info("[STREAM CHAT] Using model: {} (Image: {})", model, hasImage);
 
             List<Message> messages = new ArrayList<>();
-            messages.add(new SystemMessage("You are Endless Assistant, a helpful and concise AI built into the Gravity browser. Answer questions accurately."));
+            messages.add(new SystemMessage("You are Endless Assistant, a helpful and concise AI built into the Endless browser. Answer questions accurately."));
             messages.addAll(chatMemory.get(sessionId, 5)); // Keep last 5 for context
             
             Message userMessage;
@@ -110,8 +112,10 @@ public class ChatService {
     public String chat(String sessionId, String message, String base64Image) {
         try {
             boolean hasImage = base64Image != null && !base64Image.isEmpty();
+            String model = hasImage ? "moondream:latest" : "phi3:mini";
+            
             OllamaOptions options = OllamaOptions.create()
-                    .withModel("moondream:latest")
+                    .withModel(model)
                     .withTemperature(0.7f);
 
             List<Message> messages = new ArrayList<>(chatMemory.get(sessionId, 10)); // Get last 10 messages

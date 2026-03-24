@@ -55,6 +55,9 @@ public class SecurityConfig {
                                 .requestMatchers("/api/gravity/chat/**").permitAll()
                                 .requestMatchers("/api/automation/**").permitAll()
                                 .requestMatchers("/ws/**").permitAll()
+                                .requestMatchers("/", "/quiz", "/quiz2").permitAll()
+                                .requestMatchers("/*.html", "/*.css", "/*.js", "/*.png", "/*.ico").permitAll()
+                                .requestMatchers("/error").permitAll()
                                 .anyRequest().authenticated()
                 );
 

@@ -9,6 +9,7 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
     <script src="https://cdn.jsdelivr.net/npm/sockjs-client@1/dist/sockjs.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/stomp.js/2.3.3/stomp.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
     <link rel="stylesheet" href="style.css">
 </head>
 
@@ -71,12 +72,24 @@
         <div class="menu-item" id="menuProfile"><i class="fa-solid fa-user-circle"></i> Profile</div>
         <div class="menu-item" id="menuSettings"><i class="fa-solid fa-gear"></i> Settings</div>
         <div class="menu-divider"></div>
-        <div class="menu-item" id="menuAbout"><i class="fa-solid fa-info-circle"></i> About Gravity</div>
+        <div class="menu-item" id="menuAbout"><i class="fa-solid fa-info-circle"></i> About Endless</div>
     </div>
 
     <!-- Main Content Area -->
     <div class="content-area" id="contentArea">
-        <div class="browser-pane" id="browserPane"></div>
+        <div class="browser-pane" id="browserPane">
+            <!-- Native Automation Overlay -->
+            <div id="automationOverlay" class="hidden">
+                <div class="wave-container">
+                    <div class="wave wave1"></div>
+                    <div class="wave wave2"></div>
+                    <div class="wave wave3"></div>
+                </div>
+                <div class="automation-badge">
+                    <i class="fa-solid fa-robot"></i> Endless Automation Active
+                </div>
+            </div>
+        </div>
 
         <!-- AI Assistant Sidebar -->
         <aside class="assistant-sidebar" id="assistantSidebar">
@@ -109,13 +122,12 @@
                     <div class="chat-msg assistant-msg">
                         <div class="msg-avatar"><i class="fa-solid fa-sparkles"></i></div>
                         <div class="msg-content">
-                            <div class="msg-text">Hi! I'm Endless, your AI assistant. Ask me anything or tell me to
-                                automate
-                                a task on the web!</div>
+                            <div class="msg-text">Hi! I'm Endless, your AI assistant. Ask me anything or tell me to automate a task on the web!</div>
                         </div>
                     </div>
                 </div>
-                <div class="chat-input-area">
+                <div class="chat-input-area" style="position: relative;">
+                    <div id="slashCommandsMenu" class="hidden" style="position: absolute; bottom: 100%; left: 0; right: 0; background: rgba(28,28,46,0.95); backdrop-filter: blur(10px); border-top: 1px solid var(--border-medium); max-height: 220px; overflow-y: auto; z-index: 100; box-shadow: 0 -10px 30px rgba(0,0,0,0.5);"></div>
                     <div id="imagePreviewContainer" class="hidden" style="padding: 8px; position: relative; width: max-content; margin-bottom: 5px;">
                         <img id="imagePreview" src="" alt="Preview" style="max-height: 60px; border-radius: 4px; border: 1px solid var(--border-color);">
                         <button id="removeImageBtn" style="position: absolute; top: 0; right: 0; background: var(--danger, #f87171); color: white; border: none; border-radius: 50%; width: 20px; height: 20px; cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 14px;">&times;</button>
@@ -224,6 +236,11 @@
                             <span class="toggle-slider"></span>
                         </label>
                     </div>
+                    <div class="setting-item">
+                        <label>Gemini API Key <span style="font-size:11px;color:var(--text-muted);">(for fast automation)</span></label>
+                        <input type="password" class="setting-input" id="settingGeminiKey" placeholder="Paste your Gemini API key here...">
+                        <small style="color:var(--text-muted);font-size:11px;margin-top:4px;display:block;">Get free at <a href="https://aistudio.google.com/app/apikey" style="color:var(--accent-light);">aistudio.google.com</a></small>
+                    </div>
                 </div>
                 <div class="settings-group">
                     <h3>Appearance</h3>
@@ -281,26 +298,38 @@
         </div>
     </div>
 
-    <div class="overlay-panel hidden" id="aboutPanel">
-        <div class="overlay-panel-inner">
-            <div class="overlay-header">
-                <h2><i class="fa-solid fa-atom"></i> About Gravity</h2>
-                <button class="overlay-close" data-close-panel="aboutPanel"><i class="fa-solid fa-xmark"></i></button>
+    <div class="overlay-panel hidden about-overlay-special" id="aboutPanel">
+        <div class="about-panel-premium">
+            <button class="overlay-close about-premium-close" data-close-panel="aboutPanel"><i class="fa-solid fa-xmark"></i></button>
+            
+            <div class="about-bg-effects">
+                <div class="about-glow about-glow-1"></div>
+                <div class="about-glow about-glow-2"></div>
             </div>
-            <div class="overlay-body">
-                <div class="about-content">
-                    <div class="about-logo"><i class="fa-solid fa-atom"></i></div>
-                    <h1>Gravity Browser</h1>
-                    <p class="about-version">Version 1.0.0</p>
-                    <p class="about-desc">An AI-powered browser with a built-in assistant panel. Browse the web, ask
-                        questions,
-                        and automate tasks — all from one window.</p>
-                    <div class="about-tech">
-                        <span class="tech-badge">Electron</span>
-                        <span class="tech-badge">Spring Boot</span>
-                        <span class="tech-badge">Gemini AI</span>
-                        <span class="tech-badge">Selenium</span>
-                    </div>
+
+            <div class="about-premium-content">
+                <div class="about-logo-wrapper">
+                    <div class="about-logo-ring"></div>
+                    <div class="about-logo-core"><i class="fa-solid fa-infinity"></i></div>
+                </div>
+                
+                <h1 class="about-title-premium">Endless <span>Browser</span></h1>
+                <div class="about-version-badge">Build 2026.1.0-alpha</div>
+                
+                <p class="about-desc-premium">
+                    A next-generation web experience seamlessly integrating autonomous AI, 
+                    deep automation, and pristine design aesthetics all in one window.
+                </p>
+
+                <div class="about-tech-stack">
+                    <div class="tech-item"><i class="fa-brands fa-node-js"></i> Electron Core</div>
+                    <div class="tech-item"><i class="fa-brands fa-java"></i> Spring Boot Framework</div>
+                    <div class="tech-item"><i class="fa-solid fa-brain"></i> Autonomous Local AI</div>
+                    <div class="tech-item"><i class="fa-solid fa-robot"></i> Advanced Selenium Engine</div>
+                </div>
+                
+                <div class="about-footer-premium">
+                    <p>Designed for power users. Built for the future.</p>
                 </div>
             </div>
         </div>
@@ -367,8 +396,27 @@
         </div>
     </div>
 
+    <!-- Command Palette Overlay -->
+    <div id="cmdPaletteOverlay" class="overlay-panel hidden" style="align-items: flex-start; justify-content: center; padding-top: 12vh; z-index: 10000; background: rgba(0,0,0,0.6); backdrop-filter: blur(8px);">
+        <div class="cmd-palette" id="cmdPalette" style="width: 650px; max-width: 90%; background: var(--bg-secondary); border: 1px solid var(--border-medium); border-radius: var(--radius-xl); box-shadow: 0 25px 50px -12px rgba(0,0,0,1); overflow: hidden; display: flex; flex-direction: column;">
+            <div class="cmd-input-wrapper" style="display: flex; align-items: center; padding: 18px 24px; border-bottom: 1px solid rgba(255,255,255,0.05); background: rgba(255,255,255,0.02);">
+                <i class="fa-solid fa-bolt" style="color: var(--accent); font-size: 18px; margin-right: 15px;"></i>
+                <input type="text" id="cmdInput" placeholder="Search tabs, bookmarks, history... (Type > for actions)" style="flex: 1; background: transparent; border: none; outline: none; color: var(--text-primary); font-size: 18px; font-family: inherit;">
+                <div class="cmd-badge" style="background: var(--bg-tertiary); padding: 4px 8px; border-radius: 6px; font-size: 11px; color: var(--text-muted); font-weight: 600; letter-spacing: 1px;">ESC</div>
+            </div>
+            <div class="cmd-results" id="cmdResults" style="max-height: 450px; overflow-y: auto; padding: 12px;">
+                <!-- Results go here -->
+            </div>
+        </div>
+    </div>
+
     <!-- User Profile Details in Sidebar Header -->
     <style>
+        .cmd-result-item { padding: 12px 16px; display: flex; align-items: center; gap: 12px; cursor: pointer; border-radius: 12px; transition: all 0.2s; margin-bottom: 4px; }
+        .cmd-result-item:hover, .cmd-result-item.selected { background: rgba(124, 106, 255, 0.15); }
+        .cmd-result-icon { width: 32px; height: 32px; border-radius: 8px; display: flex; align-items: center; justify-content: center; background: rgba(255,255,255,0.05); color: var(--text-secondary); font-size: 14px; }
+        .cmd-result-item.selected .cmd-result-icon { color: var(--accent-light); background: rgba(124, 106, 255, 0.2); }
+        
         .sidebar-user-info { display: flex; align-items: center; gap: 10px; margin-left: auto; }
         
         /* Premium Auth Panels */

@@ -2,6 +2,9 @@ const { app, BrowserWindow, ipcMain, session } = require('electron');
 // Endless Browser - Main Process
 const path = require('path');
 
+// Enable Remote Debugging for Selenium automation to attach to the existing window
+app.commandLine.appendSwitch('remote-debugging-port', '9222');
+
 let mainWindow;
 
 function createWindow() {

@@ -4,6 +4,7 @@ import com.gravity.model.ChatMessage;
 import com.gravity.model.ChatMessageRepository;
 import com.gravity.model.User;
 import com.gravity.model.UserRepository;
+import com.gravity.service.AutomationOrchestrator;
 import com.gravity.service.ChatService;
 import lombok.Data;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -14,9 +15,11 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.core.userdetails.UserDetails;
 import reactor.core.publisher.Flux;
 
-import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 @RestController
 @RequestMapping("/api/gravity")
@@ -24,6 +27,7 @@ import java.util.Map;
 public class GravityController {
 
     private final ChatService chatService;
+    private final AutomationOrchestrator orchestrator;
 
     @Autowired
     private ChatMessageRepository chatMessageRepository;
@@ -31,8 +35,11 @@ public class GravityController {
     @Autowired
     private UserRepository userRepository;
 
-    public GravityController(ChatService chatService) {
+    private final ExecutorService executor = Executors.newSingleThreadExecutor();
+
+    public GravityController(ChatService chatService, AutomationOrchestrator orchestrator) {
         this.chatService = chatService;
+        this.orchestrator = orchestrator;
     }
 
     @PostMapping("/chat")
@@ -46,12 +53,19 @@ public class GravityController {
     }
 
     @PostMapping(value = "/chat/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
-    public Flux<String> chatStream(@RequestBody ChatRequest request) {
+    public Flux<Map<String, String>> chatStream(@RequestBody ChatRequest request) {
         if (request == null || request.getMessage() == null) {
-            return Flux.just("Error: Please provide a message.");
+            Map<String, String> err = new HashMap<>();
+            err.put("content", "Error: Please provide a message.");
+            return Flux.just(err);
         }
         String sessionId = request.getSessionId() != null ? request.getSessionId() : "default-session";
-        return chatService.streamChat(sessionId, request.getMessage(), request.getImage());
+        return chatService.streamChat(sessionId, request.getMessage(), request.getImage())
+                .map(content -> {
+                    Map<String, String> map = new HashMap<>();
+                    map.put("content", content);
+                    return map;
+                });
     }
 
     @GetMapping("/history")
@@ -75,8 +89,29 @@ public class GravityController {
     @GetMapping("/status")
     public ResponseEntity<?> getStatus() {
         return ResponseEntity.ok(Map.of(
-            "status", "idle"
+            "status", orchestrator.isRunning() ? "running" : "idle"
         ));
+    }
+
+    @PostMapping("/start")
+    public ResponseEntity<?> startAutomation(@RequestBody Map<String, String> request) {
+        String instruction = request.get("instruction");
+        if (instruction == null || instruction.isBlank()) {
+            return ResponseEntity.badRequest().body(Map.of("message", "Instruction is required."));
+        }
+        if (orchestrator.isRunning()) {
+            return ResponseEntity.badRequest().body(Map.of("message", "Automation already running."));
+        }
+        // Default to Google if no URL specified
+        String url = request.getOrDefault("url", "https://www.google.com");
+        executor.submit(() -> orchestrator.runFullTask(instruction, url));
+        return ResponseEntity.ok(Map.of("status", "started", "message", "Automation started."));
+    }
+
+    @PostMapping("/stop")
+    public ResponseEntity<?> stopAutomation() {
+        orchestrator.stopTask();
+        return ResponseEntity.ok(Map.of("status", "stopped", "message", "Automation stopped."));
     }
 
     @Data
