@@ -737,8 +737,10 @@ function appendLog(text) {
 
 async function runAutomationTask(instruction) {
     const wv = getActiveWebview();
-    const currentUrl = wv ? wv.getURL() : 'https://www.google.com';
-    const backendUrl = settings.backendUrl || BACKEND_URL;
+    if (!wv) {
+        appendAssistantMessage('No active tab to control.');
+        return;
+    }
 
     if (automationRunning) {
         appendAssistantMessage('⚠️ Automation already running. Click Stop first.');
@@ -750,47 +752,184 @@ async function runAutomationTask(instruction) {
     document.getElementById('automationOverlay').classList.remove('hidden');
     handleStatus('thinking');
 
-    try {
-        appendLog('🚀 Starting Selenium automation: ' + instruction);
-        appendAssistantMessage('🚀 Starting automation with Selenium... A Chrome window will open.');
+    const backendUrl = settings.backendUrl || BACKEND_URL;
 
-        // Try the new Selenium endpoint first
-        let resp = await fetch(backendUrl + '/api/automation/run', {
+    // Try Selenium first, fallback to JS-based automation
+    try {
+        const currentUrl = wv.getURL();
+        appendLog('🚀 Starting automation: ' + instruction);
+
+        const resp = await fetch(backendUrl + '/api/automation/run', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ command: instruction, url: currentUrl })
         });
 
-        if (!resp.ok) {
-            // Fallback to gravity/start endpoint
-            resp = await fetch(backendUrl + '/api/gravity/start', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ instruction: instruction, url: currentUrl })
-            });
-        }
-
         if (resp.ok) {
             const data = await resp.json();
-            appendLog('✅ ' + (data.message || 'Automation started'), 'success');
-            appendAssistantMessage('🤖 Automation started! Watch the Chrome window. Progress updates will appear here.');
-        } else {
-            const errData = await resp.json().catch(() => ({ message: 'Server error' }));
-            appendLog('❌ ' + (errData.message || 'Failed to start automation'), 'error');
-            appendAssistantMessage('❌ ' + (errData.message || 'Failed to start automation'));
-            automationRunning = false;
-            document.getElementById('automationOverlay').classList.add('hidden');
-            handleStatus('idle');
+            appendAssistantMessage('🤖 ' + (data.message || 'Automation started! Watch logs for progress.'));
+            appendLog('✅ Selenium automation started', 'success');
+            // WebSocket will handle status updates
+            return;
         }
-        // Note: Progress updates come via WebSocket. The overlay and status
-        // will be updated by handleStatus() when the backend sends 'idle'/'done'.
     } catch (e) {
-        appendLog('❌ Connection error: ' + e.message, 'error');
-        appendAssistantMessage('❌ Could not connect to backend: ' + e.message);
-        automationRunning = false;
+        appendLog('⚠️ Selenium unavailable, using built-in automation...', 'info');
+    }
+
+    // ── JS-based fallback automation ──
+    appendAssistantMessage('🤖 Using built-in automation...');
+    
+    try {
+        const startResp = await fetch(backendUrl + '/api/automation/start', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ command: instruction })
+        });
+        const session = await startResp.json();
+        const sessionId = session.id;
+
+        for (let step = 0; step < 10 && automationRunning; step++) {
+            appendLog(`Step ${step + 1}: Capturing page...`);
+
+            const image = step === 0
+                ? (await wv.capturePage()).toDataURL('image/jpeg', 0.4)
+                : null;
+            if (step === 0 && image) appendAssistantImage(image);
+
+            const domElements = await wv.executeJavaScript(`
+                (() => {
+                    const results = [];
+                    document.querySelectorAll(
+                        'input:not([type="hidden"]), button, select, textarea,' +
+                        '[role="button"],[role="combobox"],[role="searchbox"],[role="textbox"],a,label'
+                    ).forEach((el, i) => {
+                        const rect = el.getBoundingClientRect();
+                        if (rect.width === 0 || rect.height === 0) return;
+                        const tag = el.tagName.toLowerCase();
+                        el.setAttribute('data-gravity-id', i);
+                        let labelText = '';
+                        const lbl = document.querySelector('label[for="' + el.id + '"]') || el.closest('label');
+                        if (lbl) labelText = lbl.innerText.trim();
+                        results.push({
+                            id: i, tag, type: el.type || '',
+                            text: (el.innerText || '').trim().substring(0, 80),
+                            label: labelText.substring(0, 80),
+                            placeholder: (el.placeholder || '').substring(0, 60),
+                            name: el.name || '',
+                            checked: el.checked || false,
+                            isInteractive: true
+                        });
+                    });
+                    return JSON.stringify(results.slice(0, 80));
+                })()
+            `);
+
+            const pageText = await wv.executeJavaScript(
+                `document.body.innerText.substring(0, 4000)`
+            );
+
+            handleStatus('thinking');
+            appendAssistantMessage(`Step ${step + 1}: AI thinking...`);
+
+            const resp = await fetch(backendUrl + '/api/automation/step', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    sessionId,
+                    screenshot: image,
+                    dom: domElements,
+                    pageText,
+                    url: wv.getURL()
+                })
+            });
+
+            if (!resp.ok) { appendAssistantMessage('❌ Backend error.'); break; }
+
+            const result = await resp.json();
+
+            if (result.status === 'DONE') {
+                appendAssistantMessage('✅ Task complete!'); break;
+            }
+
+            if (result.status === 'NEEDS_CONFIRMATION') {
+                handleStatus('acting');
+                await executeActions(wv, result.actions || [], instruction);
+                appendAssistantMessage('⚠️ ' + result.message);
+                appendAssistantMessage('✅ Form filled! Click Submit manually.');
+                break;
+            }
+
+            handleStatus('acting');
+            const success = await executeActions(wv, result.actions || [], instruction);
+            if (!success) break;
+
+            await new Promise(r => setTimeout(r, 800));
+        }
+    } catch (e) {
+        appendLog('❌ Automation error: ' + e.message, 'error');
+        appendAssistantMessage('❌ Error: ' + e.message);
+    } finally {
         document.getElementById('automationOverlay').classList.add('hidden');
+        automationRunning = false;
         handleStatus('idle');
     }
+}
+
+async function executeActions(wv, actions, originalCommand) {
+    let success = true;
+    for (const act of actions) {
+        if (!automationRunning) return false;
+        try {
+            const type = act.action;
+            const targetId = act.target;
+            const value = act.value;
+            appendLog(\`Executing: \${type} \${targetId ? 'on #' + targetId : ''} \${value ? 'val: ' + value : ''}\`, 'acting');
+
+            if (type === 'done') return true;
+
+            if (type === 'navigate') {
+                await wv.loadURL(value.startsWith('http') ? value : 'https://' + value);
+                await new Promise(r => setTimeout(r, 2000));
+                continue;
+            }
+
+            const jsExec = \`
+            (() => {
+                const el = document.querySelector('[data-gravity-id="\${targetId}"]');
+                if (!el) return false;
+                el.scrollIntoView({ behavior: 'instant', block: 'center' });
+                if ('\${type}' === 'click') {
+                    if (el.type === 'radio' || el.type === 'checkbox') {
+                        el.checked = true;
+                        el.dispatchEvent(new Event('change', { bubbles: true }));
+                    }
+                    el.click();
+                } else if ('\${type}' === 'type') {
+                    el.value = \\\`\${value || ''}\\\`.replace(/\\\\\\\\/g, '\\\\\\\\\\\\\\\\');
+                    el.dispatchEvent(new Event('input', { bubbles: true }));
+                    el.dispatchEvent(new Event('change', { bubbles: true }));
+                } else if ('\${type}' === 'select') {
+                    if (el.tagName.toLowerCase() === 'select') {
+                        const opts = Array.from(el.options);
+                        const targetOpt = opts.find(o => o.text.trim() === \\\`\${value || ''}\\\`.replace(/\\\\\\\\/g, '\\\\\\\\\\\\\\\\') || o.value === \\\`\${value || ''}\\\`.replace(/\\\\\\\\/g, '\\\\\\\\\\\\\\\\'));
+                        if (targetOpt) {
+                            el.value = targetOpt.value;
+                            el.dispatchEvent(new Event('change', { bubbles: true }));
+                        }
+                    } else {
+                        el.value = \\\`\${value || ''}\\\`.replace(/\\\\\\\\/g, '\\\\\\\\\\\\\\\\');
+                    }
+                }
+                return true;
+            })()\`;
+            const result = await wv.executeJavaScript(jsExec);
+            if (!result) appendLog('Failed to find element ' + targetId, 'error');
+        } catch (e) {
+            appendLog('Action error: ' + e.message, 'error');
+            success = false;
+        }
+    }
+    return success;
 }
 
 // Smart send: if message starts with "/do " use automation (Selenium), otherwise use chat
@@ -1120,8 +1259,9 @@ function logout() {
 // History Functions
 async function fetchHistory() {
     if (!jwtToken) {
-        document.getElementById('chatHistoryList').innerHTML = 
-            '<div class="empty-state"><i class="fa-solid fa-lock"></i><p>Please login to see history.</p></div>';
+        const list = document.getElementById('chatHistoryList');
+        if (list) list.innerHTML = 
+            '<div class="empty-state"><p>Please login to see history.</p></div>';
         return;
     }
     

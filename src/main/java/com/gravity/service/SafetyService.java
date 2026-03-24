@@ -40,8 +40,8 @@ public class SafetyService {
         String r = (reason != null ? reason : "").toLowerCase();
         // Only block FORM submit, not search submit
         boolean isFormSubmit = (r.contains("submit") && !r.contains("search"))
-                || r.contains("buy") 
-                || r.contains("pay") 
+                || r.contains("buy")
+                || r.contains("pay")
                 || r.contains("delete")
                 || r.contains("purchase")
                 || "submit".equals(type);

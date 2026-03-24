@@ -44,7 +44,22 @@ public class SeleniumService {
         
         // Find and switch to the correct webview
         switchToWebview(driver);
-        
+
+        // Verify connection works and warn if it's the shell
+        try {
+            String title = driver.getTitle();
+            String url = driver.getCurrentUrl();
+            log.info("Connected to: {} | {}", title, url);
+            // If it's the Electron UI page (file://), log warning
+            if (url != null && url.startsWith("file://")) {
+                log.warn("Connected to Electron UI shell, not the webview content!");
+                log.warn("Selenium automation will work on main window, not embedded webview.");
+            }
+        } catch (Exception e) {
+            log.error("Could not verify connection: {}", e.getMessage());
+            throw new RuntimeException("Selenium connection failed: " + e.getMessage());
+        }
+
         return sessionId;
     }
     
