@@ -575,7 +575,12 @@ function connectWebSocket() {
             stompClient.subscribe('/topic/logs', function (msg) {
                 const data = JSON.parse(msg.body);
                 appendLog(data.message, 'info');
-                if (data.message.includes('AI Feedback:') || data.message.includes('Error:') || data.message.includes('success')) {
+                if (data.message && 
+                    !data.message.includes('Logged out') &&
+                    !data.message.includes('logout') &&
+                    (data.message.includes('AI Feedback:') || 
+                     data.message.includes('Error:') || 
+                     data.message.includes('success'))) {
                     appendAssistantMessage(data.message.replace('AI Feedback: ', ''));
                 }
             });
@@ -867,7 +872,7 @@ async function executeActions(wv, actions, originalCommand) {
         if (!automationRunning) return false;
         try {
             const type = act.action;
-            const targetId = act.target;
+            const targetId = act.targetId ?? act.target;
             const value = act.value;
             appendLog(`Executing: ${type} ${targetId ? 'on #' + targetId : ''} ${value ? 'val: ' + value : ''}`, 'acting');
 
@@ -900,7 +905,8 @@ async function executeActions(wv, actions, originalCommand) {
                             const el = document.querySelector('[data-gravity-id="${targetId}"]');
                             if (!el) return;
                             el.scrollIntoView({ behavior: 'instant', block: 'center' });
-                            el.value = \`${value || ''}\`.replace(/\\\\/g, '\\\\\\\\');
+                            el.value = ${JSON.stringify(value || '')};
+                            el.focus();
                             el.dispatchEvent(new Event('input', { bubbles: true }));
                             el.dispatchEvent(new Event('change', { bubbles: true }));
                         })()
