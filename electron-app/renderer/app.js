@@ -754,29 +754,7 @@ async function runAutomationTask(instruction) {
 
     const backendUrl = settings.backendUrl || BACKEND_URL;
 
-    // Try Selenium first, fallback to JS-based automation
-    try {
-        const currentUrl = wv.getURL();
-        appendLog('🚀 Starting automation: ' + instruction);
-
-        const resp = await fetch(backendUrl + '/api/automation/run', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ command: instruction, url: currentUrl })
-        });
-
-        if (resp.ok) {
-            const data = await resp.json();
-            appendAssistantMessage('🤖 ' + (data.message || 'Automation started! Watch logs for progress.'));
-            appendLog('✅ Selenium automation started', 'success');
-            // WebSocket will handle status updates
-            return;
-        }
-    } catch (e) {
-        appendLog('⚠️ Selenium unavailable, using built-in automation...', 'info');
-    }
-
-    // ── JS-based fallback automation ──
+    appendLog('🚀 Starting automation: ' + instruction);
     appendAssistantMessage('🤖 Using built-in automation...');
     
     try {
@@ -887,43 +865,59 @@ async function executeActions(wv, actions, originalCommand) {
 
             if (type === 'done') return true;
 
-            if (type === 'navigate') {
-                await wv.loadURL(value.startsWith('http') ? value : 'https://' + value);
-                await new Promise(r => setTimeout(r, 2000));
-                continue;
-            }
-
-            const jsExec = `
-            (() => {
-                const el = document.querySelector('[data-gravity-id="${targetId}"]');
-                if (!el) return false;
-                el.scrollIntoView({ behavior: 'instant', block: 'center' });
-                if ('${type}' === 'click') {
-                    if (el.type === 'radio' || el.type === 'checkbox') {
-                        el.checked = true;
-                        el.dispatchEvent(new Event('change', { bubbles: true }));
-                    }
-                    el.click();
-                } else if ('${type}' === 'type') {
-                    el.value = \`${value || ''}\`.replace(/\\\\/g, '\\\\\\\\');
-                    el.dispatchEvent(new Event('input', { bubbles: true }));
-                    el.dispatchEvent(new Event('change', { bubbles: true }));
-                } else if ('${type}' === 'select') {
-                    if (el.tagName.toLowerCase() === 'select') {
-                        const opts = Array.from(el.options);
-                        const targetOpt = opts.find(o => o.text.trim() === \`${value || ''}\`.replace(/\\\\/g, '\\\\\\\\') || o.value === \`${value || ''}\`.replace(/\\\\/g, '\\\\\\\\'));
-                        if (targetOpt) {
-                            el.value = targetOpt.value;
+            switch (type) {
+                case 'navigate':
+                    await wv.loadURL(value.startsWith('http') ? value : 'https://' + value);
+                    await new Promise(r => setTimeout(r, 2000));
+                    break;
+                case 'click':
+                    await wv.executeJavaScript(`
+                        (() => {
+                            const el = document.querySelector('[data-gravity-id="${targetId}"]');
+                            if (!el) { console.warn('Element not found: ${targetId}'); return; }
+                            el.scrollIntoView({ behavior: 'instant', block: 'center' });
+                            el.dispatchEvent(new MouseEvent('mouseover', { bubbles: true }));
+                            el.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
+                            if (el.type === 'radio' || el.type === 'checkbox') {
+                                el.checked = true;
+                                el.dispatchEvent(new Event('change', { bubbles: true }));
+                            }
+                            el.click();
+                        })()
+                    `);
+                    break;
+                case 'type':
+                    await wv.executeJavaScript(`
+                        (() => {
+                            const el = document.querySelector('[data-gravity-id="${targetId}"]');
+                            if (!el) return;
+                            el.scrollIntoView({ behavior: 'instant', block: 'center' });
+                            el.value = \`${value || ''}\`.replace(/\\\\/g, '\\\\\\\\');
+                            el.dispatchEvent(new Event('input', { bubbles: true }));
                             el.dispatchEvent(new Event('change', { bubbles: true }));
-                        }
-                    } else {
-                        el.value = \`${value || ''}\`.replace(/\\\\/g, '\\\\\\\\');
-                    }
-                }
-                return true;
-            })()`;
-            const result = await wv.executeJavaScript(jsExec);
-            if (!result) appendLog('Failed to find element ' + targetId, 'error');
+                        })()
+                    `);
+                    break;
+                case 'select':
+                    await wv.executeJavaScript(`
+                        (() => {
+                            const el = document.querySelector('[data-gravity-id="${targetId}"]');
+                            if (!el) return;
+                            el.scrollIntoView({ behavior: 'instant', block: 'center' });
+                            if (el.tagName.toLowerCase() === 'select') {
+                                const opts = Array.from(el.options);
+                                const targetOpt = opts.find(o => o.text.trim() === \`${value || ''}\`.replace(/\\\\/g, '\\\\\\\\') || o.value === \`${value || ''}\`.replace(/\\\\/g, '\\\\\\\\'));
+                                if (targetOpt) {
+                                    el.value = targetOpt.value;
+                                    el.dispatchEvent(new Event('change', { bubbles: true }));
+                                }
+                            } else {
+                                el.value = \`${value || ''}\`.replace(/\\\\/g, '\\\\\\\\');
+                            }
+                        })()
+                    `);
+                    break;
+            }
         } catch (e) {
             appendLog('Action error: ' + e.message, 'error');
             success = false;
