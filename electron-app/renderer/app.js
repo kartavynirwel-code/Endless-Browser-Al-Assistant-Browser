@@ -765,6 +765,7 @@ async function runAutomationTask(instruction) {
         });
         const session = await startResp.json();
         const sessionId = session.id;
+        let lastActionsJson = '';
 
         for (let step = 0; step < 10 && automationRunning; step++) {
             appendLog(`Step ${step + 1}: Capturing page...`);
@@ -790,7 +791,7 @@ async function runAutomationTask(instruction) {
                         if (lbl) labelText = lbl.innerText.trim();
                         results.push({
                             id: i, tag, type: el.type || '',
-                            text: (el.innerText || '').trim().substring(0, 80),
+                            text: (el.value || el.innerText || '').trim().substring(0, 80),
                             label: labelText.substring(0, 80),
                             placeholder: (el.placeholder || '').substring(0, 60),
                             name: el.name || '',
@@ -828,6 +829,13 @@ async function runAutomationTask(instruction) {
             if (result.status === 'DONE') {
                 appendAssistantMessage('✅ Task complete!'); break;
             }
+
+            const currentActionsJson = JSON.stringify(result.actions || []);
+            if (currentActionsJson === lastActionsJson && currentActionsJson !== '[]') {
+                appendAssistantMessage('✅ AI has finished entering data (or repeated itself). Stopping.');
+                break;
+            }
+            lastActionsJson = currentActionsJson;
 
             if (result.status === 'NEEDS_CONFIRMATION') {
                 handleStatus('acting');

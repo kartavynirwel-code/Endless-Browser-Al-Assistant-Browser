@@ -27,7 +27,6 @@ public class ReasoningService {
             String dom, String visualSummary, List<String> history) {
 
         String systemPrompt = """
-        String systemPrompt = """
             You are a browser automation agent. 
             OUTPUT: Only a raw JSON array. Zero explanation. Zero markdown.
             
