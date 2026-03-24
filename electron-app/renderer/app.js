@@ -883,7 +883,7 @@ async function executeActions(wv, actions, originalCommand) {
             const type = act.action;
             const targetId = act.target;
             const value = act.value;
-            appendLog(\`Executing: \${type} \${targetId ? 'on #' + targetId : ''} \${value ? 'val: ' + value : ''}\`, 'acting');
+            appendLog(`Executing: ${type} ${targetId ? 'on #' + targetId : ''} ${value ? 'val: ' + value : ''}`, 'acting');
 
             if (type === 'done') return true;
 
@@ -893,35 +893,35 @@ async function executeActions(wv, actions, originalCommand) {
                 continue;
             }
 
-            const jsExec = \`
+            const jsExec = `
             (() => {
-                const el = document.querySelector('[data-gravity-id="\${targetId}"]');
+                const el = document.querySelector('[data-gravity-id="${targetId}"]');
                 if (!el) return false;
                 el.scrollIntoView({ behavior: 'instant', block: 'center' });
-                if ('\${type}' === 'click') {
+                if ('${type}' === 'click') {
                     if (el.type === 'radio' || el.type === 'checkbox') {
                         el.checked = true;
                         el.dispatchEvent(new Event('change', { bubbles: true }));
                     }
                     el.click();
-                } else if ('\${type}' === 'type') {
-                    el.value = \\\`\${value || ''}\\\`.replace(/\\\\\\\\/g, '\\\\\\\\\\\\\\\\');
+                } else if ('${type}' === 'type') {
+                    el.value = \`${value || ''}\`.replace(/\\\\/g, '\\\\\\\\');
                     el.dispatchEvent(new Event('input', { bubbles: true }));
                     el.dispatchEvent(new Event('change', { bubbles: true }));
-                } else if ('\${type}' === 'select') {
+                } else if ('${type}' === 'select') {
                     if (el.tagName.toLowerCase() === 'select') {
                         const opts = Array.from(el.options);
-                        const targetOpt = opts.find(o => o.text.trim() === \\\`\${value || ''}\\\`.replace(/\\\\\\\\/g, '\\\\\\\\\\\\\\\\') || o.value === \\\`\${value || ''}\\\`.replace(/\\\\\\\\/g, '\\\\\\\\\\\\\\\\'));
+                        const targetOpt = opts.find(o => o.text.trim() === \`${value || ''}\`.replace(/\\\\/g, '\\\\\\\\') || o.value === \`${value || ''}\`.replace(/\\\\/g, '\\\\\\\\'));
                         if (targetOpt) {
                             el.value = targetOpt.value;
                             el.dispatchEvent(new Event('change', { bubbles: true }));
                         }
                     } else {
-                        el.value = \\\`\${value || ''}\\\`.replace(/\\\\\\\\/g, '\\\\\\\\\\\\\\\\');
+                        el.value = \`${value || ''}\`.replace(/\\\\/g, '\\\\\\\\');
                     }
                 }
                 return true;
-            })()\`;
+            })()`;
             const result = await wv.executeJavaScript(jsExec);
             if (!result) appendLog('Failed to find element ' + targetId, 'error');
         } catch (e) {
